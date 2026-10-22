@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$Java21,[switch]$SkipBuild,[switch]$CompileInstaller,[string]$Version='0.1.0')
+param([Parameter(Mandatory=$true)][string]$Java21,[switch]$SkipBuild,[switch]$CompileInstaller,[string]$Version='0.0.0')
 $ErrorActionPreference='Stop'
 [Net.ServicePointManager]::SecurityProtocol=[Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 $root=Split-Path -Parent $PSScriptRoot
@@ -21,7 +21,7 @@ if(!$SkipBuild){
   if($LASTEXITCODE -ne 0){throw '앱 테스트·빌드 실패'}
  }finally{Pop-Location}
 }
-$jar=Get-ChildItem (Join-Path $root 'backend/build/libs') -Filter '*.jar' | Where-Object {$_.Name -notmatch 'plain'} | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$jar=Get-Item -LiteralPath (Join-Path $root ("backend/build/libs/checklist-$Version.jar")) -ErrorAction SilentlyContinue
 if(!$jar){throw '앱 JAR가 없습니다. 먼저 빌드해 주세요.'}
 $winsw=Join-Path $cache 'WinSW-2.12.0.exe'
 Get-Verified $winsw 'https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe' '05B82D46AD331CC16BDC00DE5C6332C1EF818DF8CEEFCD49C726553209B3A0DA'

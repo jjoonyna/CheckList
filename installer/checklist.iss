@@ -1,5 +1,5 @@
 ﻿#ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #define AppVersion "0.0.0"
 #endif
 #ifndef StageDir
   #define StageDir "..\build\deploy-stage"

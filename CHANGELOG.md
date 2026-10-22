@@ -1,6 +1,8 @@
 # 변경 이력
 
-## [미출시] — 2026-10-22
+## [0.0.0] - 2026-10-22
+
+관련 이슈: #1
 
 ### 추가
 
@@ -34,9 +36,15 @@
 - 중요 원댓글 등록·해제와 중요 그룹 최신순, 답글 묶음 동반 이동.
 - PR이 main에 실제 머지됐을 때 테스트·JAR·Windows EXE를 생성하고 결과물을 올리는 GitHub Actions 워크플로.
 
+### 배포 자동화
+
+- PR 테스트와 main 통합 후 JAR·Windows EXE 빌드, CHANGELOG 기반 릴리즈 자동 게시.
+- 최초 릴리즈 태그 v.0.0.0, 결과물 checklist-0.0.0.jar·checklist-setup-0.0.0.exe 첨부.
+- 버전 불일치·빈 릴리즈 노트·기존 태그 덮어쓰기 방지.
+
 ### 미검증
 
-- GitHub Actions의 실제 원격 실행. YAML·이벤트·작업 구성은 actionlint 통과.
+- main 통합 후 Windows EXE 생성·릴리즈 게시의 실제 원격 실행. PR 검증 결과는 해당 PR의 Checks에서 확인하며 YAML·이벤트·작업 구성은 actionlint 통과.
 - 최신 요청이 포함된 JAR·설치 EXE 생성 완료. 실제 서비스 설치와 원격 CI 실행 성공을 의미하지 않음.
 - 관리자 권한을 이용한 실제 Windows 서비스 설치·제거 검증.
 - Docker Compose 실행, 비공개 GitHub PAT, 500MB 실파일 전송 검증.
