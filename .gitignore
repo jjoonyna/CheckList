@@ -1,0 +1,20 @@
+# 비밀값과 로컬 설정
+.env
+.env.*
+!.env.example
+**/application-local.yml
+# 생성 파일
+**/node_modules/
+**/dist/
+**/build/
+**/.gradle/
+tools-cache/
+# IDE와 운영체제
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+**/application-local.properties
+**/.gradle-user-home/

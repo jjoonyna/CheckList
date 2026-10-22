@@ -1,0 +1,2 @@
+ALTER TABLE checklist_item ADD COLUMN priority VARCHAR(16) NOT NULL DEFAULT 'NORMAL';
+ALTER TABLE checklist_item ADD CONSTRAINT item_priority_check CHECK (priority IN ('URGENT','HIGH','NORMAL','LOW','CONSIDER'));

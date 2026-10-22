@@ -1,0 +1,9 @@
+export type ItemPriority = 'URGENT' | 'HIGH' | 'NORMAL' | 'LOW' | 'CONSIDER';
+export const priorityLabels: Record<ItemPriority,string> = { URGENT:'긴급', HIGH:'높음', NORMAL:'보통', LOW:'낮음', CONSIDER:'고려' };
+export type User = { id: number; email: string; name: string };
+export type AuthResponse = { user: User; accessToken: string };
+export type Item = { id: number; parentId: number | null; rootId: number; depth: number; title: string; description: string; dueDate: string | null; assigneeId: number | null; editorIds: number[]; createdBy: number; priority: ItemPriority; status: 'OPEN' | 'DONE'; version: number; editable: boolean; matchesFilter: boolean; sourceUrl: string | null };
+export type Attachment = { id: number; filename: string; size: number };
+export type Comment = { id: number; itemId: number; parentId: number | null; author: User; body: string; createdAt: string; important: boolean; attachments: Attachment[] };
+export type GithubIssue = { number: number; title: string; body: string; htmlUrl: string; state: string };
+export type ApiError = { message: string; code: string };

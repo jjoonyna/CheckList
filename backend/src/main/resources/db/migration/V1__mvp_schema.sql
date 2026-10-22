@@ -1,0 +1,10 @@
+CREATE TABLE app_user (id BIGSERIAL PRIMARY KEY, email VARCHAR(320) NOT NULL UNIQUE, password_hash VARCHAR(100) NOT NULL, name VARCHAR(100) NOT NULL);
+CREATE TABLE checklist_item (id BIGSERIAL PRIMARY KEY, parent_id BIGINT REFERENCES checklist_item(id), root_id BIGINT, depth INTEGER NOT NULL, title VARCHAR(200) NOT NULL, description VARCHAR(20000) NOT NULL DEFAULT '', due_date DATE, assignee_id BIGINT REFERENCES app_user(id), created_by BIGINT NOT NULL REFERENCES app_user(id), status VARCHAR(10) NOT NULL DEFAULT 'OPEN', version BIGINT NOT NULL DEFAULT 0, source_url VARCHAR(2048), github_repository VARCHAR(300), github_issue_number INTEGER, CONSTRAINT item_github_unique UNIQUE(github_repository, github_issue_number));
+ALTER TABLE checklist_item ADD CONSTRAINT item_root_fk FOREIGN KEY (root_id) REFERENCES checklist_item(id);
+CREATE TABLE item_editor (item_id BIGINT NOT NULL REFERENCES checklist_item(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES app_user(id), PRIMARY KEY(item_id,user_id));
+CREATE TABLE item_comment (id BIGSERIAL PRIMARY KEY, item_id BIGINT NOT NULL REFERENCES checklist_item(id) ON DELETE CASCADE, parent_id BIGINT REFERENCES item_comment(id), author_id BIGINT NOT NULL REFERENCES app_user(id), body VARCHAR(10000) NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE comment_attachment (id BIGSERIAL PRIMARY KEY, comment_id BIGINT NOT NULL REFERENCES item_comment(id) ON DELETE CASCADE, filename VARCHAR(255) NOT NULL, storage_key UUID NOT NULL UNIQUE, size BIGINT NOT NULL);
+CREATE INDEX item_parent_idx ON checklist_item(parent_id);
+CREATE INDEX item_assignee_idx ON checklist_item(assignee_id);
+CREATE INDEX item_due_date_idx ON checklist_item(due_date);
+CREATE INDEX comment_item_idx ON item_comment(item_id, created_at);

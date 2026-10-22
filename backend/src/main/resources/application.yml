@@ -1,0 +1,31 @@
+spring:
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 510MB
+  application:
+    name: checklist
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/checklist}
+    username: ${DB_USERNAME:checklist}
+    password: ${DB_PASSWORD}
+  flyway:
+    enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      connect-timeout: 2s
+      timeout: 2s
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  port: ${SERVER_PORT:8383}
+app:
+  jwt-secret: ${JWT_SECRET:}
+  file-directory: ${FILE_DIRECTORY:./data/attachments}
+  secure-cookie: ${SECURE_COOKIE:false}
