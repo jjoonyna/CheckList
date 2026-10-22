@@ -69,7 +69,7 @@ npm run dev
 .\scripts\package-deploy.ps1 -Java21 'C:\Program Files\Java\jdk-21\bin\java.exe' -CompileInstaller
 ```
 
-출력은 `dist/checklist-setup-0.1.0.exe`입니다. 빌드에는 Node.js와 도구 다운로드 네트워크가 필요합니다. 설치한 앱 실행에는 번들 JRE를 사용합니다.
+출력은 `dist/checklist-setup-0.0.0.exe`입니다. 빌드에는 Node.js와 도구 다운로드 네트워크가 필요합니다. 설치한 앱 실행에는 번들 JRE를 사용합니다.
 
 설치 프로그램은 관리자 권한을 요구하며 기존 PostgreSQL 접속정보를 입력하거나 PostgreSQL 18.6을 함께 설치하는 방식을 선택합니다. 기존 서버를 사용한다면 DB와 접근 가능한 계정을 먼저 준비합니다. 번들 방식은 선택한 DB를 생성합니다. Redis는 실행 중인 로컬/사내 서버의 주소·포트·비밀번호를 입력합니다. Redis 자체는 이 EXE에 포함하지 않습니다.
 
@@ -86,11 +86,14 @@ npm run dev
 최신 JAR과 EXE에는 담당자 변경 후 편집자 제외 정책, 5단계 우선순위, 계층 정렬, 중요 원댓글과 답글 묶음 이동까지 반영했습니다. 로컬 설정·DB·첨부는 배포 파일에 포함하지 않습니다.
 
 MVP에는 메일 인증, 계층 이동·삭제, 댓글 수정·삭제, GitHub 지속 동기화를 제공하지 않습니다. Donetick은 구조·동작 분석 참고 대상으로 사용했으며 이 프로젝트는 Java/React로 별도 구현했습니다. 프로젝트 계획과 AI 분석·인수인계 자료는 저장소 밖에서 관리합니다.
-## PR 통합 후 자동 빌드
+## 자동 검증·빌드·릴리즈
 
-`.github/workflows/build.yml`은 **main 대상 PR이 실제 머지되어 닫혔을 때** 실행됩니다. 통합 결과 SHA를 고정해 Ubuntu에서 프론트 테스트·백엔드 실제 PostgreSQL/Redis 테스트·통합 JAR을 빌드한 뒤, Windows에서 검증된 JAR로 설치 EXE를 생성합니다.
-Actions 실행 화면의 결과물에서 `checklist-jar`, `checklist-windows-installer`, `checklist-test-reports`를 다운로드할 수 있으며 보관 기간은14일입니다. 액션은 검증한 공식 태그의 SHA로 고정했고 `contents: read` 권한을 사용합니다. 서비스 설치나 운영 서버 배포는 자동 수행하지 않습니다.
+main 대상 PR을 열거나 갱신하면 프론트·백엔드·릴리즈 규칙 테스트와 통합 JAR 빌드를 실행합니다. **PR이 main에 실제 통합된 뒤**에는 통합 결과 SHA로 다시 검증하고 Windows 설치 EXE를 생성한 다음 GitHub Releases에 게시합니다. PR을 통합하지 않고 닫으면 실행하지 않습니다.
 
-워크플로는 actionlint로 검사했으며 실제 원격 실행 성공은 아직 확인하지 않았습니다. 최초 저장소 준비는 PR 이벤트가 아니므로 이후 main 대상 PR 통합 시 실행됩니다. CI의 Java/Node 환경 준비는 GitHub 러너에서만 수행하며 사용자 PC의 Java 환경설정은 변경하지 않습니다.
+최초 버전은 `0.0.0`, 태그는 `v.0.0.0`입니다. `CHANGELOG.md`의 `## [0.0.0]` 절 본문을 릴리즈 설명으로 사용하고 `checklist-0.0.0.jar`와 `checklist-setup-0.0.0.exe`를 첨부합니다. 릴리즈 게시에는 해당 작업에만 `contents: write` 권한을 부여하며 나머지는 읽기 권한을 사용합니다.
 
-이벤트 조건의 공식 근거: [GitHub PR 통합 이벤트](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#running-your-pull_request-workflow-when-a-pull-request-merges).
+다음 릴리즈는 프론트 `package.json`·`package-lock.json`의 앱 버전, 백엔드 `build.gradle`, 설치 `checklist.iss`, `package-deploy.ps1`의 기본 버전을 함께 올리고 CHANGELOG에 같은 버전의 내용을 추가합니다. `node scripts/release.mjs`로 버전과 노트를 확인하고 `node --test scripts/release.test.mjs`로 규칙을 검증합니다. 버전 불일치나 누락·중복·빈 노트는 빌드를 실패시킵니다. 같은 버전이 이미 게시됐다면 릴리즈는 유지하고 새 결과물은 Actions에서 확인합니다. 기존 태그나 미완료 초안은 덮어쓰지 않고 실패시켜 수동 확인하도록 합니다.
+
+Actions 결과물 `checklist-jar`, `checklist-windows-installer`, `checklist-test-reports`의 보관 기간은 14일이며 Releases에 게시한 JAR·EXE도 다운로드할 수 있습니다. 실제 원격 설치 파일 생성·릴리즈 게시 성공은 main 통합 후 Actions에서 확인해야 합니다. 서비스 설치나 운영 서버 배포는 자동 수행하지 않습니다. CI의 Java/Node 환경 준비는 GitHub 러너에서만 수행하며 사용자 PC의 Java 환경설정은 변경하지 않습니다.
+
+이슈를 연결하는 PR에는 `Closes #1`과 같은 문구를 사용합니다. 저장소 기본 설정에 따라 main 통합 시 연결 이슈가 자동 종료됩니다. [GitHub 이슈 연결 안내](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue), [릴리즈 생성 안내](https://cli.github.com/manual/gh_release_create)를 참고합니다.
