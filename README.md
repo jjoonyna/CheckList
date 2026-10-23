@@ -30,7 +30,7 @@
 저장소 루트에서 PowerShell로 실행합니다. 기존에 설치한 사용자 전용 PostgreSQL·Redis와 `backend/config/application-local.properties`를 사용합니다.
 
 ```powershell
-.\scripts\run-local.ps1 -Java21 'C:\Program Files\Java\jdk-21\bin\java.exe'
+.\scripts\run-local.ps1 -Java21 'C:\Java\jdk\bin\java.exe'
 ```
 
 [http://localhost:8383](http://localhost:8383)에 접속해 직접 가입합니다. 앱 종료는 실행 터미널의 Ctrl+C입니다. DB·Redis 상태 확인/중지는 별도 명령입니다.
@@ -48,7 +48,7 @@ Java 21과 Node.js 20.19 이상 또는 22.12 이상, PostgreSQL·Redis가 필요
 
 ```powershell
 cd backend
-& 'C:\Program Files\Java\jdk-21\bin\java.exe' '-Dorg.gradle.java.home=C:\Program Files\Java\jdk-21' '-Dorg.gradle.jvmargs=-Dfile.encoding=COMPAT' -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain test bootJar --no-daemon --console=plain --max-workers=1
+& 'C:\Java\jdk\bin\java.exe' '-Dorg.gradle.java.home=C:\Java\jdk' '-Dorg.gradle.jvmargs=-Dfile.encoding=COMPAT' -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain test bootJar --no-daemon --console=plain --max-workers=1
 ```
 
 실제 PostgreSQL 18.6 임시 인스턴스와 테스트 전용 Redis를 사용합니다. Windows의 Redis 테스트 바이너리는 현재 PC의 사용자 전용 설치를 기본으로 찾으며, 다른 PC에서는 `-Dtest.redis.executable=<redis-server 실행파일>`을 지정합니다. 테스트 완료 시 해당 임시 서버를 종료합니다.
@@ -66,14 +66,22 @@ npm run dev
 ## 다른 PC와 Windows 설치
 
 ```powershell
-.\scripts\package-deploy.ps1 -Java21 'C:\Program Files\Java\jdk-21\bin\java.exe' -CompileInstaller
+.\scripts\package-deploy.ps1 -Java21 'C:\Java\jdk\bin\java.exe' -CompileInstaller
 ```
 
 출력은 `dist/checklist-setup-0.0.1.exe`입니다. 빌드에는 Node.js와 도구 다운로드 네트워크가 필요합니다. 설치한 앱 실행에는 번들 JRE를 사용합니다.
 
-설치 프로그램은 관리자 권한을 요구하며 기존 PostgreSQL 접속정보를 입력하거나 PostgreSQL 18.6을 함께 설치하는 방식을 선택합니다. 기존 서버를 사용한다면 DB와 접근 가능한 계정을 먼저 준비합니다. 번들 방식은 선택한 DB를 생성합니다. Redis는 실행 중인 로컬/사내 서버의 주소·포트·비밀번호를 입력합니다. Redis 자체는 이 EXE에 포함하지 않습니다.
+설치 프로그램은 관리자 권한을 요구합니다. PostgreSQL 18.6과 Redis 8.10.2 Windows 커뮤니티 빌드가 EXE에 포함되어 있으며, 설치 마법사에서 각각 **기존 서버 사용 / 이 PC에 새로 설치**를 선택합니다. PostgreSQL만 설치된 PC에서는 PostgreSQL은 기존 사용, Redis는 신규 설치를 선택하면 됩니다. WSL·Docker·별도 Java 설치는 필요하지 않습니다.
 
-설정은 설치 폴더의 `config/`, 첨부와 번들 DB는 `data/`, 로그는 `logs/`에 둡니다. 설정 파일은 관리자/SYSTEM으로 접근을 제한합니다. 실패한 초기 설정은 `config/setup-pending.json`에 보존해 다음 실행에서 재시도하며 정상 처리 후 임시 비밀 설정을 제거합니다. 제거 시 업무 데이터와 설정은 보존합니다. 구성요소 고지는 설치 폴더의 `THIRD-PARTY-NOTICES.txt`, `licenses/`, JRE의 `legal/`을 확인합니다.
+설치 순서는 **설치 폴더 → PostgreSQL 설치 방식·연결 설정 → Redis 설치 방식·연결 설정 → 파일 복사 → DB/Redis 준비 및 연결 확인 → CheckList 서비스 시작**입니다. PowerShell 콘솔은 표시하지 않으며 진행 상황과 오류를 설치 마법사에 표시합니다.
+
+기존 서버는 설치 PC의 실행 프로세스 수신 포트와 등록 서비스 설정을 자동 탐지하고 후보를 제공합니다. 선택한 주소·포트는 수정할 수 있으며 탐지되지 않거나 다른 PC의 서버를 사용하면 직접 입력합니다. 계정·비밀번호는 자동으로 읽지 않습니다. 기존 PostgreSQL 계정과 비밀번호, Redis 비밀번호(사용하는 경우)를 입력합니다.
+
+신규 설치의 기본값은 로컬주소 `127.0.0.1`, PostgreSQL 포트 `5432`·DB/계정 `checklist`, Redis 포트 `6379`입니다. 비밀번호는 설치마다 임의 생성하며 수정하거나 ‘비밀번호 표시’로 확인할 수 있습니다. 기존 프로그램이 해당 포트를 쓰면 다른 포트로 변경해야 합니다. DB가 없으면 입력 계정의 권한으로만 생성하며, 기존 서버 사용 시 해당 계정에 필요한 DB 접근·생성 권한이 있어야 합니다.
+
+신규 PostgreSQL은 `CheckListPostgreSQL`, Redis는 `CheckListRedis`, 앱은 `CheckList` Windows 서비스로 등록합니다. 이 설치가 소유한 서비스만 관리하며 다른 경로의 같은 이름 서비스를 덮어쓰지 않습니다. Redis는 로컬 주소에만 바인딩하고 비밀번호와 데이터 저장을 설정합니다. 다른 PC의 사용자는 앱 웹 주소에 접속하며 번들 Redis에 직접 연결할 필요가 없습니다.
+
+설정은 설치 폴더의 `config/`, 첨부와 번들 DB는 `data/`, 로그는 `logs/`에 둡니다. 설정 파일은 관리자/SYSTEM으로 접근을 제한합니다. 실패한 초기 설정은 보호된 `config/setup-pending.json`에 보존하고 재실행 시 마법사에 복원합니다. 입력 파일은 성공·실패 후 제거하고, DB·Redis 연결 확인이 성공해야 완료 설정으로 승격합니다. 제거 시 DB·Redis·첨부 데이터와 설정은 보존하고 앱이 설치한 서비스만 해제합니다. 기존 완료 설정이 있으면 재설치 시 입력 화면을 건너뛰고 기존 설정을 유지합니다. 구성요소 고지는 설치 폴더의 `THIRD-PARTY-NOTICES.txt`, `licenses/`, JRE의 `legal/`을 확인합니다.
 
 ## 확인 범위와 남은 항목
 
@@ -109,3 +117,5 @@ Actions 결과물 `checklist-jar`, `checklist-windows-installer`, `checklist-tes
 진단 규칙은 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-support.test.ps1`로 검사합니다. Windows CI에서는 Windows PowerShell과 PowerShell 7을 모두 검사합니다. 0.0.1 원격 로그에서 Windows 기본 tar.exe의 PostgreSQL 추출이 180초 제한으로 실패한 것을 확인해 7-Zip 방식으로 교체했습니다. tar 내부 대기 원인은 확정하지 못했으며 수정본의 원격 실행 성공은 별도 확인이 필요합니다.
 
 PostgreSQL 아카이브는 7-Zip으로 XZ를 풀고 그 안의 TAR를 추출합니다. 두 단계에 각각 180초 제한을 적용하며 `bin/initdb.exe` 존재를 확인합니다. 중간 TAR는 설치 파일에 포함하지 않습니다. GitHub Windows 러너의 사전 설치 도구를 사용하고, 로컬에 없으면 공식 26.04 포터블 도구를 SHA-256 검증 후 `tools-cache/deploy/7zip-26.04/`에 준비합니다. 시스템 PATH나 Java 환경변수는 바꾸지 않습니다. 압축 회귀 검사는 `scripts/package-postgres.test.ps1`이며 Windows CI에서 두 PowerShell로 실행합니다.
+
+설치 입력 규칙은 `scripts/install-config.test.ps1`, 4가지 설치 조합·실패 재시도·소유권·보존 검사는 `scripts/installer-flow.test.ps1`로 검증합니다. 번들 Redis 실행 검사는 `scripts/redis-bundle.test.ps1 -ServerPath <redis-server.exe>`를 사용합니다. Redis·Cygwin·OpenSSL·GCC·libiconv/libintl·zlib 원문 고지와 소스 입수 안내는 설치 폴더 `licenses/`에 보존합니다. Redis Windows 빌드는 커뮤니티 배포판이며 Redis 공식 Windows 배포판은 아닙니다.

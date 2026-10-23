@@ -89,11 +89,15 @@ jobs:
         run: |
           ./scripts/package-support.test.ps1
           ./scripts/package-postgres.test.ps1
+          ./scripts/install-config.test.ps1
+          ./scripts/installer-flow.test.ps1
       - name: Windows PowerShell 진단 테스트
         shell: powershell
         run: |
           ./scripts/package-support.test.ps1
           ./scripts/package-postgres.test.ps1
+          ./scripts/install-config.test.ps1
+          ./scripts/installer-flow.test.ps1
 
   windows-installer:
     name: Windows 설치 EXE
@@ -120,6 +124,12 @@ jobs:
       - name: 설치 EXE 생성
         shell: pwsh
         run: ./scripts/package-deploy.ps1 -Java21 (Join-Path $env:JAVA_HOME 'bin/java.exe') -SkipBuild -CompileInstaller -Version '${{ needs.test-and-jar.outputs.version }}'
+      - name: 실제 Redis 번들 실행 검사
+        shell: pwsh
+        run: |
+          $server = Get-ChildItem build -Directory -Filter 'deploy-stage-*' | Sort-Object LastWriteTime -Descending | ForEach-Object { Join-Path $_.FullName 'redis/redis-server.exe' } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (!$server) { throw '번들 Redis를 찾지 못했습니다.' }
+          ./scripts/redis-bundle.test.ps1 -ServerPath $server
       - name: 패키징 진단 로그 업로드
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

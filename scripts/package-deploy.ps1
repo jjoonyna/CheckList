@@ -65,15 +65,52 @@ $extractCache=Join-Path $cache ('jre-extract-'+(Get-Date -Format 'yyyyMMddHHmmss
 $resolvedStage=[IO.Path]::GetFullPath($stage);$resolvedExtract=[IO.Path]::GetFullPath($jreExtract);$resolvedCache=[IO.Path]::GetFullPath($extractCache)
 if(!$resolvedExtract.StartsWith($resolvedStage+[IO.Path]::DirectorySeparatorChar) -or !$resolvedCache.StartsWith([IO.Path]::GetFullPath($cache)+[IO.Path]::DirectorySeparatorChar)){throw '추출 폴더 이동 범위 오류'}
 Move-Item -LiteralPath $jreExtract -Destination $extractCache
+Start-PackageStage 'Redis 다운로드 및 압축 해제'
+$redisZip=Join-Path $cache 'Redis-8.10.2-Windows-x64-cygwin.zip'
+Get-PackageDownload $redisZip 'https://github.com/redis-windows/redis-windows/releases/download/8.10.2/Redis-8.10.2-Windows-x64-cygwin.zip' '6de5cc7f5adbf97b5928b13766383d4ad424626ef3d8b313ffff12d820ec6fc1'
+$redisExtract=Join-Path $cache ('redis-extract-'+(Get-Date -Format 'yyyyMMddHHmmss'))
+Expand-Archive -LiteralPath $redisZip -DestinationPath $redisExtract
+$redisServer=Get-ChildItem -LiteralPath $redisExtract -Recurse -Filter 'redis-server.exe' | Select-Object -First 1
+if(!$redisServer){throw 'Redis 아카이브에 실행 파일이 없습니다.'}
+$redisHome=Join-Path $stage 'redis';New-Item -ItemType Directory -Force -Path $redisHome | Out-Null
+Get-ChildItem -LiteralPath $redisServer.Directory.FullName -Force | Copy-Item -Destination $redisHome -Recurse
 Start-PackageStage '앱·서비스·라이선스 스테이징'
 Copy-Item -LiteralPath $jar.FullName -Destination (Join-Path $stage 'checklist.jar')
 Copy-Item -LiteralPath $winsw -Destination (Join-Path $stage 'checklist-service.exe')
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install-runtime.ps1'),(Join-Path $PSScriptRoot 'checklist-service.xml') -Destination $stage
+Copy-Item -LiteralPath $winsw -Destination (Join-Path $stage 'redis-service.exe')
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install-runtime.ps1'),(Join-Path $PSScriptRoot 'install-config.ps1'),(Join-Path $PSScriptRoot 'runtime-support.ps1'),(Join-Path $PSScriptRoot 'detect-services.ps1'),(Join-Path $PSScriptRoot 'stop-services.ps1'),(Join-Path $PSScriptRoot 'checklist-service.xml') -Destination $stage
 $notices=Join-Path $stage 'licenses';New-Item -ItemType Directory -Force -Path $notices | Out-Null
 Get-PackageDownload -Url 'https://raw.githubusercontent.com/winsw/winsw/v2.12.0/LICENSE.txt' -File (Join-Path $notices 'WinSW-2.12.0.txt')
 Get-PackageDownload -Url 'https://raw.githubusercontent.com/jrsoftware/issrc/is-6_7_3/license.txt' -File (Join-Path $notices 'Inno-Setup-6.7.3.txt')
+Get-PackageDownload -Url 'https://raw.githubusercontent.com/redis/redis/8.10.2/LICENSE.txt' -File (Join-Path $notices 'Redis-8.10.2.txt')
+Get-PackageDownload -Url 'https://raw.githubusercontent.com/redis-windows/redis-windows/8.10.2/LICENSE' -File (Join-Path $notices 'Redis-Windows-8.10.2.txt')
+Get-PackageDownload -Url 'https://cygwin.com/COPYING.LIB' -File (Join-Path $notices 'Cygwin-LGPLv3.txt')
+Get-PackageDownload -Url 'https://cygwin.com/COPYING' -File (Join-Path $notices 'Cygwin-GPLv3.txt')
+Get-PackageDownload -Url 'https://raw.githubusercontent.com/openssl/openssl/openssl-3.5.8/LICENSE.txt' -File (Join-Path $notices 'OpenSSL-3.5.8.txt')
+Get-PackageDownload -Url 'https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.4.0/COPYING.RUNTIME' -File (Join-Path $notices 'GCC-14.4.0-Runtime-Exception.txt')
+Get-PackageDownload -Url 'https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.4.0/COPYING3' -File (Join-Path $notices 'GCC-14.4.0-GPLv3.txt')
+Get-PackageDownload -Url 'https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt' -File (Join-Path $notices 'libiconv-libintl-LGPLv2.1.txt')
+Get-PackageDownload -Url 'https://raw.githubusercontent.com/madler/zlib/v1.3.2/zlib.h' -File (Join-Path $notices 'zlib-1.3.2-license-and-header.txt')
+$redisSources=@"
+Redis 8.10.2 원문 소스: https://github.com/redis/redis/archive/refs/tags/8.10.2.tar.gz
+Windows 빌드 소스·빌드 스크립트: https://github.com/redis-windows/redis-windows/archive/refs/tags/8.10.2.zip
+Windows 바이너리: https://github.com/redis-windows/redis-windows/releases/tag/8.10.2
+Cygwin 3.6.10 DLL 소스: https://cygwin.com/git/?p=newlib-cygwin.git;a=tag;h=refs/tags/cygwin-3_6_10-release
+Cygwin 연결 예외 및 라이선스: https://cygwin.com/licensing.html
+OpenSSL3.5.8 소스: https://github.com/openssl/openssl/archive/refs/tags/openssl-3.5.8.tar.gz
+GCC14.4.0 소스: https://gcc.gnu.org/pub/gcc/releases/gcc-14.4.0/
+libiconv1.19 소스: https://ftp.gnu.org/gnu/libiconv/libiconv-1.19.tar.gz
+gettext0.22.5 소스: https://ftp.gnu.org/gnu/gettext/gettext-0.22.5.tar.gz
+zlib1.3.2 소스: https://github.com/madler/zlib/archive/refs/tags/v1.3.2.tar.gz
+Cygwin 의존 패키지 소스 배포: https://mirrors.kernel.org/sourceware/cygwin/x86_64/release/
+포함 라이브러리: Cygwin3.6.10, OpenSSL3.5.8, libiconv1.19, gettext0.22.5, zlib1.3.2, GCC14.4.0 libgcc·libstdc++.
+Redis는 변경하지 않은 별도 서버 프로세스로 제공하며 CheckList는 TCP로 연결합니다.
+"@
+[IO.File]::WriteAllText((Join-Path $notices 'Redis-SOURCES.txt'),$redisSources,[Text.UTF8Encoding]::new($true))
 $notice=@"
 CheckList 설치 구성요소 안내
+Redis 8.10.2 Windows 커뮤니티 빌드: licenses/Redis-8.10.2.txt·Redis-Windows-8.10.2.txt·Redis-SOURCES.txt
+Cygwin과 동봉 라이브러리: licenses/Cygwin-LGPLv3.txt·Cygwin-GPLv3.txt, 원본 Redis README 보존
 WinSW 2.12.0: MIT, licenses/WinSW-2.12.0.txt, https://github.com/winsw/winsw
 PostgreSQL 18.6: PostgreSQL License, postgresql/LICENSE.txt, https://www.postgresql.org/
 Eclipse Temurin JRE 21: jre/legal 및 jre/NOTICE, https://adoptium.net/
