@@ -104,6 +104,8 @@ Actions 결과물 `checklist-jar`, `checklist-windows-installer`, `checklist-tes
 
 로그 위치는 `tools-cache/deploy/logs/<실행별 폴더>/`입니다. `package.log`는 전체 기록, `*.stdout.log`·`*.stderr.log`는 프로세스별 출력이며 Inno 도구를 새로 준비할 때 `inno-setup.log`도 생성됩니다. Actions는 실패·취소 시에도 `checklist-packaging-logs` 업로드를 시도합니다. 전체 작업 강제 종료 등으로 후속 단계가 실행되지 않으면 GitHub 실행 화면의 로그를 확인합니다.
 
-다운로드는 연결 20초·전송 시도당 180초·재시도 1회·전체 프로세스 390초 제한을 적용합니다. Java 확인 30초, PostgreSQL 추출 180초, Inno 도구 설치 120초, EXE 컴파일 600초, 로컬 앱 빌드 1200초 제한입니다. 시간 초과 시 이번 작업이 시작한 프로세스와 자식만 종료합니다. 실패한 다운로드는 임시 파일을 제거하고 기존 정상 캐시는 보존합니다.
+다운로드는 연결 20초·전송 시도당 180초·재시도 1회·전체 프로세스 390초 제한을 적용합니다. Java 확인 30초, PostgreSQL XZ·TAR 추출 각각 180초, Inno 도구 설치 120초, EXE 컴파일 600초, 로컬 앱 빌드 1200초 제한입니다. 시간 초과 시 이번 작업이 시작한 프로세스와 자식만 종료합니다. 실패한 다운로드는 임시 파일을 제거하고 기존 정상 캐시는 보존합니다.
 
-진단 규칙은 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-support.test.ps1`로 검사합니다. Windows CI에서는 Windows PowerShell과 PowerShell 7을 모두 검사합니다. 기존 원격 실행의 상세 정지 원인은 출력 부재로 확정하지 못했으며, 이번 진단 보강이 원격 지연 자체의 해결을 의미하지는 않습니다.
+진단 규칙은 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-support.test.ps1`로 검사합니다. Windows CI에서는 Windows PowerShell과 PowerShell 7을 모두 검사합니다. 0.0.1 원격 로그에서 Windows 기본 tar.exe의 PostgreSQL 추출이 180초 제한으로 실패한 것을 확인해 7-Zip 방식으로 교체했습니다. tar 내부 대기 원인은 확정하지 못했으며 수정본의 원격 실행 성공은 별도 확인이 필요합니다.
+
+PostgreSQL 아카이브는 7-Zip으로 XZ를 풀고 그 안의 TAR를 추출합니다. 두 단계에 각각 180초 제한을 적용하며 `bin/initdb.exe` 존재를 확인합니다. 중간 TAR는 설치 파일에 포함하지 않습니다. GitHub Windows 러너의 사전 설치 도구를 사용하고, 로컬에 없으면 공식 26.04 포터블 도구를 SHA-256 검증 후 `tools-cache/deploy/7zip-26.04/`에 준비합니다. 시스템 PATH나 Java 환경변수는 바꾸지 않습니다. 압축 회귀 검사는 `scripts/package-postgres.test.ps1`이며 Windows CI에서 두 PowerShell로 실행합니다.
