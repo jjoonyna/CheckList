@@ -100,3 +100,38 @@ function Complete-PackageStage {
   $script:PackageStageName=$null
  }
 }
+function Resolve-Package7Zip {
+ $command=Get-Command 7z.exe -ErrorAction SilentlyContinue
+ if($command){Write-PackageLog "7-Zip 사용: $($command.Source)";return $command.Source}
+ $installed=Join-Path $env:ProgramFiles '7-Zip/7z.exe'
+ if(Test-Path -LiteralPath $installed){Write-PackageLog "7-Zip 사용: $installed";return $installed}
+ $toolDirectory=Join-Path $PSScriptRoot '../tools-cache/deploy/7zip-26.04'
+ New-Item -ItemType Directory -Force -Path $toolDirectory | Out-Null
+ $sevenZip=Join-Path $toolDirectory 'x64/7za.exe'
+ if(!(Test-Path -LiteralPath $sevenZip)){
+  $bootstrap=Join-Path $toolDirectory '7zr.exe'
+  $extra=Join-Path $toolDirectory '7z2604-extra.7z'
+  Get-PackageDownload -File $bootstrap -Url 'https://github.com/ip7z/7zip/releases/download/26.04/7zr.exe' -Hash '256feca8e274e5da655e2a284fabafd9f554365eb164862089dacd4e8276d282'
+  Get-PackageDownload -File $extra -Url 'https://github.com/ip7z/7zip/releases/download/26.04/7z2604-extra.7z' -Hash 'dc4b11d3399db18b063630137145f5585d8f7ac847bf3639bd1185d7d1f7cee0'
+  Invoke-PackageProcess -Name '포터블 7-Zip 준비' -FilePath $bootstrap -Arguments ('x -y -sccUTF-8 "'+$extra+'" "-o'+$toolDirectory+'"') -TimeoutSeconds 120 | Out-Null
+ }
+ if(!(Test-Path -LiteralPath $sevenZip)){throw '포터블 7-Zip 실행 파일을 찾을 수 없습니다.'}
+ Write-PackageLog "포터블 7-Zip 사용: $sevenZip"
+ return (Get-Item -LiteralPath $sevenZip).FullName
+}
+
+function Expand-PackagePostgres {
+ param([string]$Archive,[string]$Destination,[string]$WorkDirectory,[string]$SevenZip)
+ if(!$SevenZip){$SevenZip=Resolve-Package7Zip}
+ New-Item -ItemType Directory -Force -Path $Destination,$WorkDirectory | Out-Null
+ Invoke-PackageStep 'PostgreSQL XZ 해제' {
+  Invoke-PackageProcess -Name '7-Zip XZ 해제' -FilePath $SevenZip -Arguments ('e -txz -y -sccUTF-8 "'+$Archive+'" "-o'+$WorkDirectory+'"') -TimeoutSeconds 180 | Out-Null
+ }
+ $tarFiles=@(Get-ChildItem -LiteralPath $WorkDirectory -File)
+ if($tarFiles.Count -ne 1){throw 'PostgreSQL XZ 안에 TAR 파일이 정확히 하나 필요합니다.'}
+ Invoke-PackageStep 'PostgreSQL TAR 해제' {
+  Invoke-PackageProcess -Name '7-Zip TAR 해제' -FilePath $SevenZip -Arguments ('x -ttar -y -sccUTF-8 "'+$tarFiles[0].FullName+'" "-o'+$Destination+'"') -TimeoutSeconds 180 | Out-Null
+ }
+ if(!(Test-Path -LiteralPath (Join-Path $Destination 'bin/initdb.exe'))){throw 'PostgreSQL 압축 구조 오류: bin/initdb.exe가 없습니다.'}
+ Write-PackageLog "PostgreSQL 추출 검증 완료: $Destination"
+}

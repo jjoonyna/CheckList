@@ -46,9 +46,13 @@ $txz=Join-Path $stage 'postgres.txz'
 $archive=[IO.Compression.ZipFile]::OpenRead($pgJar)
 try{$entry=$archive.GetEntry('postgres-windows-x86_64.txz');if(!$entry){throw 'PostgreSQL 바이너리 항목이 없습니다.'};[IO.Compression.ZipFileExtensions]::ExtractToFile($entry,$txz,$false)}finally{$archive.Dispose()}
 $pg=Join-Path $stage 'postgresql';New-Item -ItemType Directory -Force -Path $pg | Out-Null
-Invoke-PackageProcess -Name 'PostgreSQL tar 압축 해제' -FilePath (Get-Command tar.exe).Source -Arguments ('-xf "'+$txz+'" -C "'+$pg+'"') -TimeoutSeconds 180 | Out-Null
-if(!(Test-Path -LiteralPath (Join-Path $pg 'bin/initdb.exe'))){throw 'PostgreSQL 압축 구조 또는 추출 오류'}
+Expand-PackagePostgres -Archive $txz -Destination $pg -WorkDirectory (Join-Path $stage 'postgres-tar')
 Remove-Item -LiteralPath $txz -Force
+# 큰 중간 TAR 파일은 스테이징 밖 캐시에 보관해 설치 파일에 포함되지 않게 한다.
+$tarCache=Join-Path $cache ('postgres-tar-'+(Get-Date -Format 'yyyyMMddHHmmss'))
+$tarSource=[IO.Path]::GetFullPath((Join-Path $stage 'postgres-tar'))
+if(!$tarSource.StartsWith([IO.Path]::GetFullPath($stage)+[IO.Path]::DirectorySeparatorChar) -or ![IO.Path]::GetFullPath($tarCache).StartsWith([IO.Path]::GetFullPath($cache)+[IO.Path]::DirectorySeparatorChar)){throw '중간 TAR 이동 범위 오류'}
+Move-Item -LiteralPath $tarSource -Destination $tarCache
 Get-PackageDownload -Url 'https://raw.githubusercontent.com/postgres/postgres/REL_18_STABLE/COPYRIGHT' -File (Join-Path $pg 'LICENSE.txt')
 Start-PackageStage 'JRE 압축 해제 및 복사'
 $jreExtract=Join-Path $stage 'jre-extract';Expand-Archive -LiteralPath $jreZip -DestinationPath $jreExtract

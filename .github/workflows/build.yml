@@ -86,10 +86,14 @@ jobs:
           persist-credentials: false
       - name: PowerShell 7 진단 테스트
         shell: pwsh
-        run: ./scripts/package-support.test.ps1
+        run: |
+          ./scripts/package-support.test.ps1
+          ./scripts/package-postgres.test.ps1
       - name: Windows PowerShell 진단 테스트
         shell: powershell
-        run: ./scripts/package-support.test.ps1
+        run: |
+          ./scripts/package-support.test.ps1
+          ./scripts/package-postgres.test.ps1
 
   windows-installer:
     name: Windows 설치 EXE
