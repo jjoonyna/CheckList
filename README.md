@@ -69,7 +69,7 @@ npm run dev
 .\scripts\package-deploy.ps1 -Java21 'C:\Java\jdk\bin\java.exe' -CompileInstaller
 ```
 
-출력은 `dist/checklist-setup-0.0.1.exe`입니다. 빌드에는 Node.js와 도구 다운로드 네트워크가 필요합니다. 설치한 앱 실행에는 번들 JRE를 사용합니다.
+출력은 `dist/checklist-setup-0.0.2.exe`입니다. 빌드에는 Node.js와 도구 다운로드 네트워크가 필요합니다. 설치한 앱 실행에는 번들 JRE를 사용합니다.
 
 설치 프로그램은 관리자 권한을 요구합니다. PostgreSQL 18.6과 Redis 8.10.2 Windows 커뮤니티 빌드가 EXE에 포함되어 있으며, 설치 마법사에서 각각 **기존 서버 사용 / 이 PC에 새로 설치**를 선택합니다. PostgreSQL만 설치된 PC에서는 PostgreSQL은 기존 사용, Redis는 신규 설치를 선택하면 됩니다. WSL·Docker·별도 Java 설치는 필요하지 않습니다.
 
@@ -98,7 +98,7 @@ MVP에는 메일 인증, 계층 이동·삭제, 댓글 수정·삭제, GitHub �
 
 main 대상 PR을 열거나 갱신하면 프론트·백엔드·릴리즈 규칙 테스트와 통합 JAR 빌드를 실행합니다. **PR이 main에 실제 통합된 뒤**에는 통합 결과 SHA로 다시 검증하고 Windows 설치 EXE를 생성한 다음 GitHub Releases에 게시합니다. PR을 통합하지 않고 닫으면 실행하지 않습니다.
 
-현재 버전은 `0.0.1`, 태그는 `v.0.0.1`입니다. `CHANGELOG.md`의 `## [0.0.1]` 절 본문을 릴리즈 설명으로 사용하고 `checklist-0.0.1.jar`와 `checklist-setup-0.0.1.exe`를 첨부합니다. 릴리즈 게시에는 해당 작업에만 `contents: write` 권한을 부여하며 나머지는 읽기 권한을 사용합니다.
+현재 버전은 `0.0.2`, 태그는 `v.0.0.2`입니다. `CHANGELOG.md`의 `## [0.0.2]` 절 본문을 릴리즈 설명으로 사용하고 `checklist-0.0.2.jar`와 `checklist-setup-0.0.2.exe`를 첨부합니다. 릴리즈 게시에는 해당 작업에만 `contents: write` 권한을 부여하며 나머지는 읽기 권한을 사용합니다.
 
 다음 릴리즈는 프론트 `package.json`·`package-lock.json`의 앱 버전, 백엔드 `build.gradle`, 설치 `checklist.iss`, `package-deploy.ps1`의 기본 버전을 함께 올리고 CHANGELOG에 같은 버전의 내용을 추가합니다. `node scripts/release.mjs`로 버전과 노트를 확인하고 `node --test scripts/release.test.mjs`로 규칙을 검증합니다. 버전 불일치나 누락·중복·빈 노트는 빌드를 실패시킵니다. 같은 버전이 이미 게시됐다면 릴리즈는 유지하고 새 결과물은 Actions에서 확인합니다. 기존 태그나 미완료 초안은 덮어쓰지 않고 실패시켜 수동 확인하도록 합니다.
 
