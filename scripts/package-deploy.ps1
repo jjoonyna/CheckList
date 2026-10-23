@@ -1,48 +1,56 @@
 ﻿[CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$Java21,[switch]$SkipBuild,[switch]$CompileInstaller,[string]$Version='0.0.0')
+param([Parameter(Mandatory=$true)][string]$Java21,[switch]$SkipBuild,[switch]$CompileInstaller,[string]$Version='0.0.1')
 $ErrorActionPreference='Stop'
 [Net.ServicePointManager]::SecurityProtocol=[Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 $root=Split-Path -Parent $PSScriptRoot
 $cache=Join-Path $root 'tools-cache/deploy';$dist=Join-Path $root 'dist'
 $stage=Join-Path $root ('build/deploy-stage-'+(Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Force -Path $cache,$dist,$stage | Out-Null
-function Get-Verified([string]$File,[string]$Url,[string]$Hash){
- if(!(Test-Path -LiteralPath $File)){Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $File}
- if((Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash -ne $Hash){throw "배포 도구 SHA-256 불일치: $File"}
-}
+. (Join-Path $PSScriptRoot 'package-support.ps1')
+$script:PackageLogDirectory=Join-Path $cache ('logs/'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'-'+[guid]::NewGuid().ToString('N').Substring(0,8))
+New-Item -ItemType Directory -Force -Path $script:PackageLogDirectory | Out-Null
+Start-Transcript -Path (Join-Path $script:PackageLogDirectory 'package.log') | Out-Null
+try{
+Write-PackageLog "패키징 시작: 버전=$Version, 진단 로그=$script:PackageLogDirectory"
+Start-PackageStage 'Java 21 확인'
 if(!(Test-Path -LiteralPath $Java21)){throw 'Java 21 java.exe를 지정해 주세요.'}
-$versionText=& $Java21 --version
+$javaCheck=Invoke-PackageProcess -Name 'Java 버전 확인' -FilePath $Java21 -Arguments '--version' -TimeoutSeconds 30
+$versionText=Get-Content -LiteralPath $javaCheck.OutputLog
 if(($versionText -join ' ') -notmatch '(?<!\d)21\.'){throw 'Java 21 실행 파일이 필요합니다.'}
 if(!$SkipBuild){
+ Start-PackageStage '프론트·백엔드 테스트 및 JAR 빌드'
  Push-Location (Join-Path $root 'backend')
  try{
   $jdk=Split-Path -Parent (Split-Path -Parent $Java21)
-  & $Java21 "-Dorg.gradle.java.home=$jdk" '-Dorg.gradle.jvmargs=-Dfile.encoding=COMPAT' -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain test bootJar --no-daemon --console=plain
-  if($LASTEXITCODE -ne 0){throw '앱 테스트·빌드 실패'}
+  $gradleArguments='"-Dorg.gradle.java.home='+$jdk+'" "-Dorg.gradle.jvmargs=-Dfile.encoding=COMPAT" -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain test bootJar --no-daemon --console=plain'
+  Invoke-PackageProcess -Name '앱 테스트·빌드' -FilePath $Java21 -Arguments $gradleArguments -TimeoutSeconds 1200 | Out-Null
  }finally{Pop-Location}
 }
 $jar=Get-Item -LiteralPath (Join-Path $root ("backend/build/libs/checklist-$Version.jar")) -ErrorAction SilentlyContinue
 if(!$jar){throw '앱 JAR가 없습니다. 먼저 빌드해 주세요.'}
+Start-PackageStage 'WinSW·JRE·PostgreSQL 다운로드 및 해시 검증'
 $winsw=Join-Path $cache 'WinSW-2.12.0.exe'
-Get-Verified $winsw 'https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe' '05B82D46AD331CC16BDC00DE5C6332C1EF818DF8CEEFCD49C726553209B3A0DA'
+Get-PackageDownload $winsw 'https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe' '05B82D46AD331CC16BDC00DE5C6332C1EF818DF8CEEFCD49C726553209B3A0DA'
 $jreZip=Join-Path $cache 'jre-21.0.12.1.zip'
-Get-Verified $jreZip 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jre_x64_windows_hotspot_21.0.12.1_1.zip' 'D35F31E712F0FCF6AC5A093EDC90204FBFF22F720BA3950BD09D331D5E621636'
+Get-PackageDownload $jreZip 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jre_x64_windows_hotspot_21.0.12.1_1.zip' 'D35F31E712F0FCF6AC5A093EDC90204FBFF22F720BA3950BD09D331D5E621636'
 $pgJar=Join-Path $cache 'postgresql-18.6-windows.jar'
 if(!(Test-Path -LiteralPath $pgJar)){
  $candidates=@((Join-Path $root 'backend/.gradle-user-home/caches/modules-2/files-2.1/io.zonky.test.postgres/embedded-postgres-binaries-windows-amd64/18.6.0'),(Join-Path $env:USERPROFILE '.gradle/caches/modules-2/files-2.1/io.zonky.test.postgres/embedded-postgres-binaries-windows-amd64/18.6.0'))
  $cached=$candidates|Where-Object {Test-Path -LiteralPath $_}|ForEach-Object {Get-ChildItem -LiteralPath $_ -Recurse -Filter '*.jar'}|Select-Object -First 1
  if($cached){Copy-Item -LiteralPath $cached.FullName -Destination $pgJar}
 }
-Get-Verified $pgJar 'https://repo.maven.apache.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-windows-amd64/18.6.0/embedded-postgres-binaries-windows-amd64-18.6.0.jar' 'b7ef2d03588e0439f0d0a2250f43905f7464f1e96ace47703ceaf79094198150'
+Get-PackageDownload $pgJar 'https://repo.maven.apache.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-windows-amd64/18.6.0/embedded-postgres-binaries-windows-amd64-18.6.0.jar' 'b7ef2d03588e0439f0d0a2250f43905f7464f1e96ace47703ceaf79094198150'
+Start-PackageStage 'PostgreSQL 압축 해제'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $txz=Join-Path $stage 'postgres.txz'
 $archive=[IO.Compression.ZipFile]::OpenRead($pgJar)
 try{$entry=$archive.GetEntry('postgres-windows-x86_64.txz');if(!$entry){throw 'PostgreSQL 바이너리 항목이 없습니다.'};[IO.Compression.ZipFileExtensions]::ExtractToFile($entry,$txz,$false)}finally{$archive.Dispose()}
 $pg=Join-Path $stage 'postgresql';New-Item -ItemType Directory -Force -Path $pg | Out-Null
-& tar.exe -xf $txz -C $pg
-if($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath (Join-Path $pg 'bin/initdb.exe'))){throw 'PostgreSQL 압축 구조 또는 추출 오류'}
+Invoke-PackageProcess -Name 'PostgreSQL tar 압축 해제' -FilePath (Get-Command tar.exe).Source -Arguments ('-xf "'+$txz+'" -C "'+$pg+'"') -TimeoutSeconds 180 | Out-Null
+if(!(Test-Path -LiteralPath (Join-Path $pg 'bin/initdb.exe'))){throw 'PostgreSQL 압축 구조 또는 추출 오류'}
 Remove-Item -LiteralPath $txz -Force
-Invoke-WebRequest -UseBasicParsing -Uri 'https://raw.githubusercontent.com/postgres/postgres/REL_18_STABLE/COPYRIGHT' -OutFile (Join-Path $pg 'LICENSE.txt')
+Get-PackageDownload -Url 'https://raw.githubusercontent.com/postgres/postgres/REL_18_STABLE/COPYRIGHT' -File (Join-Path $pg 'LICENSE.txt')
+Start-PackageStage 'JRE 압축 해제 및 복사'
 $jreExtract=Join-Path $stage 'jre-extract';Expand-Archive -LiteralPath $jreZip -DestinationPath $jreExtract
 $jreRoot=Get-ChildItem -LiteralPath $jreExtract -Directory | Where-Object {Test-Path -LiteralPath (Join-Path $_.FullName 'bin/java.exe')} | Select-Object -First 1
 if(!$jreRoot){throw 'JRE 압축 구조 오류'}
@@ -53,12 +61,13 @@ $extractCache=Join-Path $cache ('jre-extract-'+(Get-Date -Format 'yyyyMMddHHmmss
 $resolvedStage=[IO.Path]::GetFullPath($stage);$resolvedExtract=[IO.Path]::GetFullPath($jreExtract);$resolvedCache=[IO.Path]::GetFullPath($extractCache)
 if(!$resolvedExtract.StartsWith($resolvedStage+[IO.Path]::DirectorySeparatorChar) -or !$resolvedCache.StartsWith([IO.Path]::GetFullPath($cache)+[IO.Path]::DirectorySeparatorChar)){throw '추출 폴더 이동 범위 오류'}
 Move-Item -LiteralPath $jreExtract -Destination $extractCache
+Start-PackageStage '앱·서비스·라이선스 스테이징'
 Copy-Item -LiteralPath $jar.FullName -Destination (Join-Path $stage 'checklist.jar')
 Copy-Item -LiteralPath $winsw -Destination (Join-Path $stage 'checklist-service.exe')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install-runtime.ps1'),(Join-Path $PSScriptRoot 'checklist-service.xml') -Destination $stage
 $notices=Join-Path $stage 'licenses';New-Item -ItemType Directory -Force -Path $notices | Out-Null
-Invoke-WebRequest -UseBasicParsing -Uri 'https://raw.githubusercontent.com/winsw/winsw/v2.12.0/LICENSE.txt' -OutFile (Join-Path $notices 'WinSW-2.12.0.txt')
-Invoke-WebRequest -UseBasicParsing -Uri 'https://raw.githubusercontent.com/jrsoftware/issrc/is-6_7_3/license.txt' -OutFile (Join-Path $notices 'Inno-Setup-6.7.3.txt')
+Get-PackageDownload -Url 'https://raw.githubusercontent.com/winsw/winsw/v2.12.0/LICENSE.txt' -File (Join-Path $notices 'WinSW-2.12.0.txt')
+Get-PackageDownload -Url 'https://raw.githubusercontent.com/jrsoftware/issrc/is-6_7_3/license.txt' -File (Join-Path $notices 'Inno-Setup-6.7.3.txt')
 $notice=@"
 CheckList 설치 구성요소 안내
 WinSW 2.12.0: MIT, licenses/WinSW-2.12.0.txt, https://github.com/winsw/winsw
@@ -69,16 +78,26 @@ Inno Setup 6.7.3: 설치 파일 생성 도구, licenses/Inno-Setup-6.7.3.txt, ht
 "@
 [IO.File]::WriteAllText((Join-Path $stage 'THIRD-PARTY-NOTICES.txt'),$notice,[Text.UTF8Encoding]::new($true))
 if($CompileInstaller){
+ Start-PackageStage 'Inno Setup 준비'
  $innoInstaller=Join-Path $cache 'innosetup-6.7.3.exe'
- Get-Verified $innoInstaller 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe' '9C73C3BAE7ED48D44112A0F48E66742C00090BDB5BEF71D9D3C056C66E97B732'
+ Get-PackageDownload $innoInstaller 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe' '9C73C3BAE7ED48D44112A0F48E66742C00090BDB5BEF71D9D3C056C66E97B732'
  $inno=Join-Path $cache 'inno-6.7.3'
  if(!(Test-Path -LiteralPath (Join-Path $inno 'ISCC.exe'))){
   $arguments='/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /PORTABLE=1 /DIR="'+$inno+'"'
-  $process=Start-Process -FilePath $innoInstaller -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
-  if($process.ExitCode -ne 0){throw 'Inno Setup 포터블 준비 실패'}
+  $arguments+=' /LOG="'+(Join-Path $script:PackageLogDirectory 'inno-setup.log')+'"'
+  Invoke-PackageProcess -Name 'Inno Setup 포터블 설치' -FilePath $innoInstaller -Arguments $arguments -TimeoutSeconds 120 | Out-Null
  }
- & (Join-Path $inno 'ISCC.exe') "/DAppVersion=$Version" "/DStageDir=$stage" "/DOutputDir=$dist" (Join-Path $root 'installer/checklist.iss')
- if($LASTEXITCODE -ne 0){throw 'Windows 설치 파일 컴파일 실패'}
+ Start-PackageStage 'Windows 설치 EXE 컴파일'
+ $compilerArguments='"/DAppVersion='+$Version+'" "/DStageDir='+$stage+'" "/DOutputDir='+$dist+'" "'+(Join-Path $root 'installer/checklist.iss')+'"'
+ Invoke-PackageProcess -Name 'ISCC 설치 파일 컴파일' -FilePath (Join-Path $inno 'ISCC.exe') -Arguments $compilerArguments -TimeoutSeconds 600 | Out-Null
 }
 Write-Output "앱·JRE·PostgreSQL 스테이징 완료: $stage"
 Write-Output "설치 파일 출력 위치: $dist"
+Complete-PackageStage
+Write-PackageLog '전체 패키징 완료'
+}catch{
+ Write-PackageLog "패키징 실패: 단계=$script:PackageStageName, 원인=$($_.Exception.Message), 진단 로그=$script:PackageLogDirectory"
+ throw
+}finally{
+ Stop-Transcript | Out-Null
+}

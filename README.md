@@ -69,7 +69,7 @@ npm run dev
 .\scripts\package-deploy.ps1 -Java21 'C:\Program Files\Java\jdk-21\bin\java.exe' -CompileInstaller
 ```
 
-출력은 `dist/checklist-setup-0.0.0.exe`입니다. 빌드에는 Node.js와 도구 다운로드 네트워크가 필요합니다. 설치한 앱 실행에는 번들 JRE를 사용합니다.
+출력은 `dist/checklist-setup-0.0.1.exe`입니다. 빌드에는 Node.js와 도구 다운로드 네트워크가 필요합니다. 설치한 앱 실행에는 번들 JRE를 사용합니다.
 
 설치 프로그램은 관리자 권한을 요구하며 기존 PostgreSQL 접속정보를 입력하거나 PostgreSQL 18.6을 함께 설치하는 방식을 선택합니다. 기존 서버를 사용한다면 DB와 접근 가능한 계정을 먼저 준비합니다. 번들 방식은 선택한 DB를 생성합니다. Redis는 실행 중인 로컬/사내 서버의 주소·포트·비밀번호를 입력합니다. Redis 자체는 이 EXE에 포함하지 않습니다.
 
@@ -90,10 +90,20 @@ MVP에는 메일 인증, 계층 이동·삭제, 댓글 수정·삭제, GitHub �
 
 main 대상 PR을 열거나 갱신하면 프론트·백엔드·릴리즈 규칙 테스트와 통합 JAR 빌드를 실행합니다. **PR이 main에 실제 통합된 뒤**에는 통합 결과 SHA로 다시 검증하고 Windows 설치 EXE를 생성한 다음 GitHub Releases에 게시합니다. PR을 통합하지 않고 닫으면 실행하지 않습니다.
 
-최초 버전은 `0.0.0`, 태그는 `v.0.0.0`입니다. `CHANGELOG.md`의 `## [0.0.0]` 절 본문을 릴리즈 설명으로 사용하고 `checklist-0.0.0.jar`와 `checklist-setup-0.0.0.exe`를 첨부합니다. 릴리즈 게시에는 해당 작업에만 `contents: write` 권한을 부여하며 나머지는 읽기 권한을 사용합니다.
+현재 버전은 `0.0.1`, 태그는 `v.0.0.1`입니다. `CHANGELOG.md`의 `## [0.0.1]` 절 본문을 릴리즈 설명으로 사용하고 `checklist-0.0.1.jar`와 `checklist-setup-0.0.1.exe`를 첨부합니다. 릴리즈 게시에는 해당 작업에만 `contents: write` 권한을 부여하며 나머지는 읽기 권한을 사용합니다.
 
 다음 릴리즈는 프론트 `package.json`·`package-lock.json`의 앱 버전, 백엔드 `build.gradle`, 설치 `checklist.iss`, `package-deploy.ps1`의 기본 버전을 함께 올리고 CHANGELOG에 같은 버전의 내용을 추가합니다. `node scripts/release.mjs`로 버전과 노트를 확인하고 `node --test scripts/release.test.mjs`로 규칙을 검증합니다. 버전 불일치나 누락·중복·빈 노트는 빌드를 실패시킵니다. 같은 버전이 이미 게시됐다면 릴리즈는 유지하고 새 결과물은 Actions에서 확인합니다. 기존 태그나 미완료 초안은 덮어쓰지 않고 실패시켜 수동 확인하도록 합니다.
 
 Actions 결과물 `checklist-jar`, `checklist-windows-installer`, `checklist-test-reports`의 보관 기간은 14일이며 Releases에 게시한 JAR·EXE도 다운로드할 수 있습니다. 실제 원격 설치 파일 생성·릴리즈 게시 성공은 main 통합 후 Actions에서 확인해야 합니다. 서비스 설치나 운영 서버 배포는 자동 수행하지 않습니다. CI의 Java/Node 환경 준비는 GitHub 러너에서만 수행하며 사용자 PC의 Java 환경설정은 변경하지 않습니다.
 
 이슈를 연결하는 PR에는 `Closes #1`과 같은 문구를 사용합니다. 저장소 기본 설정에 따라 main 통합 시 연결 이슈가 자동 종료됩니다. [GitHub 이슈 연결 안내](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue), [릴리즈 생성 안내](https://cli.github.com/manual/gh_release_create)를 참고합니다.
+
+## 설치 파일 생성 진단
+
+패키징은 단계 시작·완료·실패와 경과 시간을 출력합니다. 다운로드 주소·캐시 사용·파일 크기·SHA-256 검증 결과도 확인할 수 있습니다. 외부 프로세스는 15초마다 PID·CPU 시간·경과 시간을 출력하며 표준 출력과 오류를 별도 파일에 보관합니다.
+
+로그 위치는 `tools-cache/deploy/logs/<실행별 폴더>/`입니다. `package.log`는 전체 기록, `*.stdout.log`·`*.stderr.log`는 프로세스별 출력이며 Inno 도구를 새로 준비할 때 `inno-setup.log`도 생성됩니다. Actions는 실패·취소 시에도 `checklist-packaging-logs` 업로드를 시도합니다. 전체 작업 강제 종료 등으로 후속 단계가 실행되지 않으면 GitHub 실행 화면의 로그를 확인합니다.
+
+다운로드는 연결 20초·전송 시도당 180초·재시도 1회·전체 프로세스 390초 제한을 적용합니다. Java 확인 30초, PostgreSQL 추출 180초, Inno 도구 설치 120초, EXE 컴파일 600초, 로컬 앱 빌드 1200초 제한입니다. 시간 초과 시 이번 작업이 시작한 프로세스와 자식만 종료합니다. 실패한 다운로드는 임시 파일을 제거하고 기존 정상 캐시는 보존합니다.
+
+진단 규칙은 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-support.test.ps1`로 검사합니다. Windows CI에서는 Windows PowerShell과 PowerShell 7을 모두 검사합니다. 기존 원격 실행의 상세 정지 원인은 출력 부재로 확정하지 못했으며, 이번 진단 보강이 원격 지연 자체의 해결을 의미하지는 않습니다.
