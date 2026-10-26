@@ -1,4 +1,29 @@
-﻿function Write-SetupStatus([string]$Message){
+﻿function Set-InstallLogAccess([string]$Directory){
+ $reader=[Security.Principal.WindowsIdentity]::GetCurrent().User
+ # 로그만 별도 권한을 사용한다. 설정·DB·첨부 경로는 변경하지 않는다.
+ $items=[Collections.Generic.List[IO.FileSystemInfo]]::new()
+ $queue=[Collections.Generic.Queue[string]]::new();$queue.Enqueue([IO.Path]::GetFullPath($Directory))
+ while($queue.Count){
+  $item=Get-Item -LiteralPath $queue.Dequeue() -Force
+  if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw '로그 경로에 연결된 파일이나 폴더가 있어 권한 변경을 중단합니다.'}
+  $items.Add($item)
+  if(($item -is [IO.DirectoryInfo])){foreach($child in (Get-ChildItem -LiteralPath $item.FullName -Force)){$queue.Enqueue($child.FullName)}}
+ }
+ foreach($item in $items){
+  $acl=if(($item -is [IO.DirectoryInfo])){[Security.AccessControl.DirectorySecurity]::new()}else{[Security.AccessControl.FileSecurity]::new()}
+  $inherit=if(($item -is [IO.DirectoryInfo])){[Security.AccessControl.InheritanceFlags]'ContainerInherit,ObjectInherit'}else{[Security.AccessControl.InheritanceFlags]::None}
+  $acl.SetAccessRuleProtection($true,$false)
+  foreach($sid in @('S-1-5-18','S-1-5-32-544')){
+   $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid),'FullControl',$inherit,'None','Allow'))
+  }
+  if($reader.Value -notin @('S-1-5-18','S-1-5-32-544')){
+   $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($reader,'ReadAndExecute',$inherit,'None','Allow'))
+  }
+  Set-Acl -LiteralPath $item.FullName -AclObject $acl
+ }
+}
+
+function Write-SetupStatus([string]$Message){
  $line='[설치] '+$Message;Write-Host $line
  [IO.File]::AppendAllText((Join-Path $Root 'logs/install.log'),(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')+' '+$line+"`r`n",[Text.UTF8Encoding]::new($false))
 }
@@ -103,4 +128,50 @@ function Initialize-PostgresData([string]$Initdb,[string]$DataDirectory,[string]
    }
   }
  }
+}
+function Stop-OwnedService([string]$Name,[string]$Executable){
+ $service=Assert-OwnedService $Name $Executable
+ if(!$service){return $false}
+ $record=Get-CimInstance Win32_Service -Filter ("Name='"+$Name+"'") -ErrorAction Stop
+ $serviceProcess=if($record.ProcessId){Get-Process -Id $record.ProcessId -ErrorAction SilentlyContinue}else{$null}
+ try{
+  if($service.Status -ne 'Stopped'){Stop-Service -Name $Name -ErrorAction Stop}
+  $service.WaitForStatus([ServiceProcess.ServiceControllerStatus]::Stopped,[TimeSpan]::FromSeconds(30))
+  if($serviceProcess -and !$serviceProcess.WaitForExit(30000)){throw ('서비스 프로세스 종료를 확인하지 못했습니다: '+$Name)}
+ }finally{$service.Dispose();if($serviceProcess){$serviceProcess.Dispose()}}
+ return $true
+}
+function Unregister-OwnedService([string]$Name,[string]$Executable,[string]$Label){
+ if(!(Stop-OwnedService $Name $Executable)){return}
+ if(Test-Path -LiteralPath $Executable){Invoke-RuntimeCommand $Label $Executable 'uninstall'}
+ else{Invoke-RuntimeCommand $Label (Join-Path $env:SystemRoot 'System32/sc.exe') ('delete '+$Name)}
+ for($attempt=0;$attempt -lt 30;$attempt++){
+  $remaining=Get-Service -Name $Name -ErrorAction SilentlyContinue
+  if(!$remaining){return}
+  $remaining.Dispose();Start-Sleep -Milliseconds 200
+ }
+ throw ('서비스 등록 해제를 확인하지 못했습니다: '+$Name)
+}
+function Get-RedisRemovalPaths([string]$InstallRoot){
+ $base=[IO.Path]::GetFullPath($InstallRoot).TrimEnd([char[]]'\/')
+ $paths=foreach($relative in @('redis','data/redis','redis-service.exe','redis-service.xml','config/redis.conf','config/bundled-redis.marker')){
+  $path=[IO.Path]::GetFullPath((Join-Path $base $relative))
+  if(!$path.StartsWith($base+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw 'Redis 제거 경로가 설치 폴더 밖을 가리킵니다.'}
+  # 부모 경로와 모든 하위 항목을 확인하고 재분석 지점을 따라 삭제하지 않는다.
+  $cursor=$path
+  while($cursor.Length -ge $base.Length){
+   if(Test-Path -LiteralPath $cursor){if((Get-Item -LiteralPath $cursor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Redis 제거 경로에 연결된 폴더 또는 파일이 있습니다. 원본을 보존하고 제거를 중단합니다.'}}
+   if($cursor -eq $base){break};$cursor=Split-Path -Parent $cursor
+  }
+  if(Test-Path -LiteralPath $path){
+   $queue=[Collections.Generic.Queue[string]]::new();$queue.Enqueue($path)
+   while($queue.Count){
+    $item=Get-Item -LiteralPath $queue.Dequeue() -Force
+    if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Redis 데이터에 연결된 폴더 또는 파일이 있습니다. 원본을 보존하고 제거를 중단합니다.'}
+    if($item.PSIsContainer){foreach($child in (Get-ChildItem -LiteralPath $item.FullName -Force)){$queue.Enqueue($child.FullName)}}
+   }
+  }
+  $path
+ }
+ return $paths
 }

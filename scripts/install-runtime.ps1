@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param([ValidateSet('install','upgrade','uninstall')][string]$Action='install',[Parameter(Mandatory=$true)][string]$Root,[string]$SettingsFile)
+param([ValidateSet('install','upgrade','uninstall')][string]$Action='install',[Parameter(Mandatory=$true)][string]$Root,[string]$SettingsFile,[switch]$RemoveRedis)
 $ErrorActionPreference='Stop'
 $Root=[IO.Path]::GetFullPath($Root)
 . (Join-Path $PSScriptRoot 'install-config.ps1')
@@ -8,18 +8,30 @@ $configDir=Join-Path $Root 'config';$configPath=Join-Path $configDir 'applicatio
 $pendingState=Join-Path $configDir 'setup-pending.json';$pendingConfig=Join-Path $configDir 'application-pending.properties'
 $dataDir=Join-Path $Root 'data';$pgData=Join-Path $dataDir 'postgres';$pgHome=Join-Path $Root 'postgresql'
 $marker=Join-Path $configDir 'bundled-postgresql.marker';$serviceExe=Join-Path $Root 'checklist-service.exe'
-New-Item -ItemType Directory -Force -Path $configDir,$dataDir,(Join-Path $Root 'logs'),(Join-Path $dataDir 'attachments') | Out-Null
-Protect-Configuration $configDir;Protect-Configuration (Join-Path $Root 'logs')
 try{
- if(!(Test-Path -LiteralPath $serviceExe)){throw 'CheckList 서비스 실행 파일이 없습니다.'}
+ New-Item -ItemType Directory -Force -Path $configDir,$dataDir,(Join-Path $Root 'logs'),(Join-Path $dataDir 'attachments') | Out-Null
+ Protect-Configuration $configDir;Set-InstallLogAccess (Join-Path $Root 'logs')
  if($Action -eq 'uninstall'){
-  Write-SetupStatus '앱 서비스 해제'
-  if(Assert-OwnedService 'CheckList' $serviceExe){Stop-Service CheckList;Invoke-RuntimeCommand '앱 서비스 등록 해제' $serviceExe 'uninstall'}
-  if((Test-Path -LiteralPath (Join-Path $configDir 'bundled-redis.marker')) -and (Assert-OwnedService 'CheckListRedis' (Join-Path $Root 'redis-service.exe'))){Stop-Service CheckListRedis;Invoke-RuntimeCommand 'Redis 서비스 등록 해제' (Join-Path $Root 'redis-service.exe') 'uninstall'}
-  if((Test-Path -LiteralPath $marker) -and (Assert-OwnedService 'CheckListPostgreSQL' (Join-Path $pgHome 'bin/pg_ctl.exe'))){Stop-Service CheckListPostgreSQL;Invoke-RuntimeCommand 'PostgreSQL 서비스 등록 해제' (Join-Path $pgHome 'bin/pg_ctl.exe') 'unregister -N CheckListPostgreSQL'}
-  Write-SetupStatus '서비스 해제 완료. 설정·DB·Redis·첨부 데이터는 보존했습니다.'
+  # 다른 설치의 서비스를 건드리지 않도록 모든 제거 대상을 먼저 검증한다.
+  $owned=Assert-OwnedService 'CheckList' $serviceExe
+  if($owned){$owned.Dispose()}
+  $deleteRedis=$RemoveRedis -and (Test-Path -LiteralPath (Join-Path $configDir 'bundled-redis.marker'))
+  $redisPaths=@()
+  if($deleteRedis){
+   $owned=Assert-OwnedService 'CheckListRedis' (Join-Path $Root 'redis-service.exe')
+   if($owned){$owned.Dispose()}
+   $redisPaths=@(Get-RedisRemovalPaths $Root)
+  }
+  Unregister-OwnedService 'CheckList' $serviceExe '앱 서비스 등록 해제'
+  if($deleteRedis){
+   Unregister-OwnedService 'CheckListRedis' (Join-Path $Root 'redis-service.exe') 'Redis 서비스 등록 해제'
+   foreach($path in $redisPaths){if(Test-Path -LiteralPath $path){Remove-Item -LiteralPath $path -Recurse -Force}}
+   Write-SetupStatus '앱 서비스와 전용 Redis 프로그램·서비스·데이터를 제거했습니다. PostgreSQL·앱 설정·업무·첨부 데이터는 보존했습니다.'
+  }else{Write-SetupStatus '앱 서비스를 제거했습니다. PostgreSQL·Redis·앱 설정·업무·첨부 데이터는 보존했습니다.'}
+  if(Test-Path -LiteralPath (Join-Path $Root 'logs/install-error.txt')){Remove-Item -LiteralPath (Join-Path $Root 'logs/install-error.txt') -Force}
   return
  }
+ if(!(Test-Path -LiteralPath $serviceExe)){throw 'CheckList 서비스 실행 파일이 없습니다.'}
  if(!(Test-Path -LiteralPath $configPath)){
   if($SettingsFile){
    $settings=Get-Content -LiteralPath $SettingsFile -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -71,12 +83,26 @@ try{
   try{if((Invoke-RestMethod -Uri 'http://127.0.0.1:8383/api/health' -TimeoutSec 2).status -eq 'UP'){$ready=$true;break}}catch{}
   Start-Sleep -Seconds 1
  }
- if(!$ready){throw '앱 준비 확인에 실패했습니다. logs 폴더를 확인한 뒤 설치 프로그램을 다시 실행해 주세요.'}
+ if(!$ready){throw '앱 준비 확인에 실패했습니다. logs 폴더의 진단 기록에서 원인을 확인해 주세요.'}
+ if(Test-Path -LiteralPath (Join-Path $Root 'logs/install-error.txt')){Remove-Item -LiteralPath (Join-Path $Root 'logs/install-error.txt') -Force}
  Write-SetupStatus '설치 완료: http://localhost:8383'
 }catch{
- Write-SetupStatus ('설치 실패: '+$_.Exception.Message)
- Write-ProtectedText (Join-Path $Root 'logs/install-error.txt') $_.Exception.Message
- throw
+ $failure=$_
+ $failureMessage=$failure.Exception.Message
+ if($Action -ne 'uninstall'){
+  # 실패한 설치의 앱만 중단하고 DB·Redis·서비스 등록·파일은 보존한다.
+  try{
+   if(Stop-OwnedService 'CheckList' $serviceExe){
+    $failureMessage += [Environment]::NewLine+'설치 실패로 CheckList 앱 서비스를 중단했습니다. DB·Redis·설정·데이터·파일은 보존됩니다.'
+   }
+  }catch{
+   $failureMessage += [Environment]::NewLine+'CheckList 앱 중단을 확인하지 못했습니다: '+$_.Exception.Message
+  }
+ }
+ # 중단이나 로그 기록의 추가 오류가 최초 설치 실패 원인을 덮지 않게 한다.
+ try{Write-SetupStatus ('설치 실패: '+$failureMessage)}catch{Write-Warning ('설치 로그 기록 실패: '+$_.Exception.Message)}
+ try{[IO.File]::WriteAllText((Join-Path $Root 'logs/install-error.txt'),$failureMessage,[Text.UTF8Encoding]::new($false))}catch{Write-Warning ('설치 오류 파일 기록 실패: '+$_.Exception.Message)}
+ throw $failure
 }finally{
  if($SettingsFile -and (Test-Path -LiteralPath $SettingsFile)){Remove-Item -LiteralPath $SettingsFile -Force}
 }
