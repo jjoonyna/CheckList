@@ -77,3 +77,30 @@ function Wait-RuntimePort([int]$Port){
  }
  throw '신규 서버가 연결 가능한 상태가 되지 않았습니다. logs 폴더를 확인해 주세요.'
 }
+function Initialize-PostgresData([string]$Initdb,[string]$DataDirectory,[string]$Username,[string]$Password){
+ # initdb는 관리자 그룹 권한을 내려 실행하므로 현재 사용자 SID로만 임시 접근을 허용한다.
+ $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+ $pwFile=Join-Path (Split-Path -Parent $DataDirectory) ('.pg-init-'+[guid]::NewGuid().ToString('N'))
+ $grants=@('*S-1-5-18:(OI)(CI)(F)','*S-1-5-32-544:(OI)(CI)(F)')
+ if($sid -ne 'S-1-5-18'){$grants+=('*'+$sid+':(OI)(CI)(F)')}
+ try{
+  New-Item -ItemType Directory -Force -Path $DataDirectory | Out-Null
+  & icacls.exe $DataDirectory /inheritance:r /grant:r $grants | Out-Null
+  if($LASTEXITCODE -ne 0){throw 'PostgreSQL 초기화 폴더의 접근 권한을 설정하지 못했습니다.'}
+  # 설정 폴더의 보호는 유지하고 비밀번호 파일 하나에만 초기화 계정의 읽기를 허용한다.
+  Write-ProtectedText $pwFile $Password
+  if($sid -ne 'S-1-5-18'){
+   & icacls.exe $pwFile /grant:r ('*'+$sid+':(R)') | Out-Null
+   if($LASTEXITCODE -ne 0){throw 'PostgreSQL 초기화 비밀번호 파일의 읽기 권한을 설정하지 못했습니다.'}
+  }
+  Invoke-RuntimeCommand 'PostgreSQL 초기화' $Initdb ('-D "'+$DataDirectory+'" -U "'+$Username+'" --encoding=UTF8 --locale=C --auth-host=scram-sha-256 --auth-local=trust "--pwfile='+$pwFile+'"')
+ }finally{
+  try{if(Test-Path -LiteralPath $pwFile){Remove-Item -LiteralPath $pwFile -Force}}
+  finally{
+   if($sid -ne 'S-1-5-18' -and (Test-Path -LiteralPath $DataDirectory)){
+    & icacls.exe $DataDirectory /remove:g ('*'+$sid) /T /Q | Out-Null
+    if($LASTEXITCODE -ne 0){throw 'PostgreSQL 초기화 계정의 임시 접근 권한을 회수하지 못했습니다.'}
+   }
+  }
+ }
+}

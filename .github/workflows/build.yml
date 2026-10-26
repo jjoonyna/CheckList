@@ -124,6 +124,12 @@ jobs:
       - name: 설치 EXE 생성
         shell: pwsh
         run: ./scripts/package-deploy.ps1 -Java21 (Join-Path $env:JAVA_HOME 'bin/java.exe') -SkipBuild -CompileInstaller -Version '${{ needs.test-and-jar.outputs.version }}'
+      - name: 실제 PostgreSQL 초기화 권한 검사
+        shell: powershell
+        run: |
+          $initdb = Get-ChildItem build -Directory -Filter 'deploy-stage-*' | Sort-Object LastWriteTime -Descending | ForEach-Object { Join-Path $_.FullName 'postgresql/bin/initdb.exe' } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (!$initdb) { throw '번들 PostgreSQL을 찾지 못했습니다.' }
+          ./scripts/postgres-permissions.test.ps1 -Initdb $initdb
       - name: 실제 Redis 번들 실행 검사
         shell: pwsh
         run: |

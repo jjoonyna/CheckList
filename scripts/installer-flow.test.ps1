@@ -10,6 +10,7 @@ function Assert($Value,$Message){if(!$Value){throw $Message}}
 function Protect-Configuration([string]$Path){}
 function Get-Service {param($Name,$ErrorAction) return $script:Services[$Name]}
 function Get-CimInstance {param($ClassName,$Filter,$ErrorAction) $serviceName=$Filter -replace "^Name='|'$",'';return $script:Services[$serviceName]}
+function Initialize-PostgresData {param($Initdb,$DataDirectory,$Username,$Password) Invoke-RuntimeCommand 'PostgreSQL 초기화' $Initdb ''}
 function Wait-RuntimePort {param($Port)}
 function Start-Service {param($Name) $script:Events.Add('start:'+ $Name)}
 function Stop-Service {param($Name) $script:Events.Add('stop:'+ $Name)}
