@@ -175,3 +175,42 @@ function Get-RedisRemovalPaths([string]$InstallRoot){
  }
  return $paths
 }
+
+function Test-InstallJarArgument([string]$CommandLine,[string]$InstallRoot){
+ if(!$CommandLine){return $false}
+ $match=[regex]::Match($CommandLine,'(?i)^\s*(?:"[^"]+"|\S+)\s+-jar\s+(?:"([^"]+)"|(\S+))(?=\s|$)')
+ if(!$match.Success){return $false}
+ $argument=if($match.Groups[1].Success){$match.Groups[1].Value}else{$match.Groups[2].Value}
+ if(![IO.Path]::IsPathRooted($argument)){return $false}
+ try{return [string]::Equals([IO.Path]::GetFullPath($argument),[IO.Path]::GetFullPath((Join-Path $InstallRoot 'checklist.jar')),[StringComparison]::OrdinalIgnoreCase)}catch{return $false}
+}
+function Get-InstallJavaProcesses([string]$InstallRoot){
+ $java=[IO.Path]::GetFullPath((Join-Path $InstallRoot 'jre/bin/java.exe'))
+ foreach($record in @(Get-CimInstance Win32_Process -Filter "Name='java.exe'" -ErrorAction Stop)){
+  if(!$record.ExecutablePath){throw ('Java 프로세스의 실행 경로를 확인하지 못했습니다. PID '+$record.ProcessId+'를 확인한 후 설치해 주세요.')}
+  $sameJava=[string]::Equals([IO.Path]::GetFullPath($record.ExecutablePath),$java,[StringComparison]::OrdinalIgnoreCase)
+  $sameJar=Test-InstallJarArgument $record.CommandLine $InstallRoot
+  if($sameJava -ne $sameJar){
+   throw ('설치 경로와 JAR가 모두 일치하지 않는 Java 프로세스가 있습니다. 종료하지 않고 설치를 중단합니다. PID '+$record.ProcessId)
+  }
+  if($sameJava){$record}
+ }
+}
+function Stop-InstallJavaProcesses([string]$InstallRoot){
+ foreach($record in @(Get-InstallJavaProcesses $InstallRoot)){
+  $process=Get-Process -Id $record.ProcessId -ErrorAction SilentlyContinue
+  if(!$process){continue}
+  try{
+   # 핸들을 유지하고 PID·생성 시각·두 실행 경로를 다시 확인한 뒤 해당 프로세스만 종료한다.
+   $null=$process.Handle
+   $current=Get-CimInstance Win32_Process -Filter ('ProcessId='+$record.ProcessId) -ErrorAction Stop
+   if(!$current -or $process.HasExited){continue}
+   if($current.CreationDate -ne $record.CreationDate){throw ('Java 프로세스가 변경되어 종료하지 않습니다. PID '+$record.ProcessId)}
+   $java=[IO.Path]::GetFullPath((Join-Path $InstallRoot 'jre/bin/java.exe'))
+   if(!$current.ExecutablePath -or ![string]::Equals([IO.Path]::GetFullPath($current.ExecutablePath),$java,[StringComparison]::OrdinalIgnoreCase) -or !(Test-InstallJarArgument $current.CommandLine $InstallRoot)){throw ('Java 프로세스의 소유 경로를 다시 확인하지 못했습니다. PID '+$record.ProcessId)}
+   $process.Kill()
+   if(!$process.WaitForExit(30000)){throw ('CheckList Java 프로세스 종료를 확인하지 못했습니다. PID '+$record.ProcessId)}
+  }finally{$process.Dispose()}
+ }
+ if(@(Get-InstallJavaProcesses $InstallRoot).Count){throw 'CheckList Java 프로세스가 남아 있어 설치를 중단합니다.'}
+}
