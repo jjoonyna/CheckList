@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$Java21,[switch]$SkipBuild,[switch]$CompileInstaller,[string]$Version='0.0.2')
+param([Parameter(Mandatory=$true)][string]$Java21,[switch]$SkipBuild,[switch]$CompileInstaller,[string]$Version='0.0.3')
 $ErrorActionPreference='Stop'
 [Net.ServicePointManager]::SecurityProtocol=[Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 $root=Split-Path -Parent $PSScriptRoot

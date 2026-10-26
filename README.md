@@ -69,7 +69,7 @@ npm run dev
 .\scripts\package-deploy.ps1 -Java21 'C:\Java\jdk\bin\java.exe' -CompileInstaller
 ```
 
-출력은 `dist/checklist-setup-0.0.2.exe`입니다. 빌드에는 Node.js와 도구 다운로드 네트워크가 필요합니다. 설치한 앱 실행에는 번들 JRE를 사용합니다.
+출력은 `dist/checklist-setup-0.0.3.exe`입니다. 빌드에는 Node.js와 도구 다운로드 네트워크가 필요합니다. 설치한 앱 실행에는 번들 JRE를 사용합니다.
 
 설치 프로그램은 관리자 권한을 요구합니다. PostgreSQL 18.6과 Redis 8.10.2 Windows 커뮤니티 빌드가 EXE에 포함되어 있으며, 설치 마법사에서 각각 **기존 서버 사용 / 이 PC에 새로 설치**를 선택합니다. PostgreSQL만 설치된 PC에서는 PostgreSQL은 기존 사용, Redis는 신규 설치를 선택하면 됩니다. WSL·Docker·별도 Java 설치는 필요하지 않습니다.
 
@@ -87,7 +87,7 @@ npm run dev
 
 2026-10-22 기준 백엔드 35개, 프론트 8개 테스트와 실제 브라우저 기본 9개·추가 10개 흐름이 통과했습니다. 실제 GitHub 공개 이슈 조회·가져오기, DB/Redis 연결, 첨부 다운로드를 확인했고 통합 JAR과 EXE를 생성했습니다.
 
-현재 계정에 관리자 권한이 없어 **EXE의 실제 Windows 서비스 등록·제거는 미검증**입니다. 설치 스크립트의 실패/재시도와 정상 설정 확정은 서비스 대역으로 검증했습니다. Docker Compose 실행, 비공개 GitHub PAT, 500MB 실파일 전송은 이번 검증 범위에 포함하지 않았습니다. 첨부 크기 경계는 서버 규칙 테스트로 확인했습니다.
+2026-10-26에는 기본 `Program Files/CheckList` 경로에서 PostgreSQL 초기화 권한 오류를 수정하고, 실패한 설치 재시도·PostgreSQL/Redis/앱 서비스 등록과 시작·Redis 인증·앱 응답을 실제 검증했습니다. 서비스 제거는 대역 검사 범위입니다. Docker Compose 실행, 비공개 GitHub PAT, 500MB 실파일 전송은 이번 검증 범위에 포함하지 않았습니다. 첨부 크기 경계는 서버 규칙 테스트로 확인했습니다.
 
 편집자에서 제외할 계정이 하위 항목 담당자로 남아 있으면 서버가 변경을 거절하고 편집 창에 안내합니다. 기간·완료 상태에 관계없이 해당 트리를 검사하며 담당자를 먼저 변경하거나 미지정해야 합니다. 담당자를 자동 해제하지 않습니다.
 
@@ -98,7 +98,7 @@ MVP에는 메일 인증, 계층 이동·삭제, 댓글 수정·삭제, GitHub �
 
 main 대상 PR을 열거나 갱신하면 프론트·백엔드·릴리즈 규칙 테스트와 통합 JAR 빌드를 실행합니다. **PR이 main에 실제 통합된 뒤**에는 통합 결과 SHA로 다시 검증하고 Windows 설치 EXE를 생성한 다음 GitHub Releases에 게시합니다. PR을 통합하지 않고 닫으면 실행하지 않습니다.
 
-현재 버전은 `0.0.2`, 태그는 `v.0.0.2`입니다. `CHANGELOG.md`의 `## [0.0.2]` 절 본문을 릴리즈 설명으로 사용하고 `checklist-0.0.2.jar`와 `checklist-setup-0.0.2.exe`를 첨부합니다. 릴리즈 게시에는 해당 작업에만 `contents: write` 권한을 부여하며 나머지는 읽기 권한을 사용합니다.
+현재 버전은 `0.0.3`, 태그는 `v.0.0.3`입니다. `CHANGELOG.md`의 `## [0.0.3]` 절 본문을 릴리즈 설명으로 사용하고 `checklist-0.0.3.jar`와 `checklist-setup-0.0.3.exe`를 첨부합니다. 릴리즈 게시에는 해당 작업에만 `contents: write` 권한을 부여하며 나머지는 읽기 권한을 사용합니다.
 
 다음 릴리즈는 프론트 `package.json`·`package-lock.json`의 앱 버전, 백엔드 `build.gradle`, 설치 `checklist.iss`, `package-deploy.ps1`의 기본 버전을 함께 올리고 CHANGELOG에 같은 버전의 내용을 추가합니다. `node scripts/release.mjs`로 버전과 노트를 확인하고 `node --test scripts/release.test.mjs`로 규칙을 검증합니다. 버전 불일치나 누락·중복·빈 노트는 빌드를 실패시킵니다. 같은 버전이 이미 게시됐다면 릴리즈는 유지하고 새 결과물은 Actions에서 확인합니다. 기존 태그나 미완료 초안은 덮어쓰지 않고 실패시켜 수동 확인하도록 합니다.
 
@@ -117,5 +117,7 @@ Actions 결과물 `checklist-jar`, `checklist-windows-installer`, `checklist-tes
 진단 규칙은 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-support.test.ps1`로 검사합니다. Windows CI에서는 Windows PowerShell과 PowerShell 7을 모두 검사합니다. 0.0.1 원격 로그에서 Windows 기본 tar.exe의 PostgreSQL 추출이 180초 제한으로 실패한 것을 확인해 7-Zip 방식으로 교체했습니다. tar 내부 대기 원인은 확정하지 못했으며 수정본의 원격 실행 성공은 별도 확인이 필요합니다.
 
 PostgreSQL 아카이브는 7-Zip으로 XZ를 풀고 그 안의 TAR를 추출합니다. 두 단계에 각각 180초 제한을 적용하며 `bin/initdb.exe` 존재를 확인합니다. 중간 TAR는 설치 파일에 포함하지 않습니다. GitHub Windows 러너의 사전 설치 도구를 사용하고, 로컬에 없으면 공식 26.04 포터블 도구를 SHA-256 검증 후 `tools-cache/deploy/7zip-26.04/`에 준비합니다. 시스템 PATH나 Java 환경변수는 바꾸지 않습니다. 압축 회귀 검사는 `scripts/package-postgres.test.ps1`이며 Windows CI에서 두 PowerShell로 실행합니다.
+
+PostgreSQL 초기화 중에는 현재 설치 계정에 데이터 폴더 쓰기와 임시 비밀번호 파일 읽기만 허용하며, 성공·실패 후 임시 권한과 파일을 정리합니다. 설정 폴더 전체의 관리자/SYSTEM 접근 제한은 유지합니다. 관리자 PowerShell에서 `scripts/postgres-permissions.test.ps1 -Initdb <설치 폴더의 postgresql/bin/initdb.exe>`로 실제 Program Files 초기화·실패 정리·설정 폴더 권한 보존을 검사할 수 있습니다.
 
 설치 입력 규칙은 `scripts/install-config.test.ps1`, 4가지 설치 조합·실패 재시도·소유권·보존 검사는 `scripts/installer-flow.test.ps1`로 검증합니다. 번들 Redis 실행 검사는 `scripts/redis-bundle.test.ps1 -ServerPath <redis-server.exe>`를 사용합니다. Redis·Cygwin·OpenSSL·GCC·libiconv/libintl·zlib 원문 고지와 소스 입수 안내는 설치 폴더 `licenses/`에 보존합니다. Redis Windows 빌드는 커뮤니티 배포판이며 Redis 공식 Windows 배포판은 아닙니다.

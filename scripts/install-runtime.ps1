@@ -41,9 +41,7 @@ try{
    $pgService=Assert-OwnedService 'CheckListPostgreSQL' $pgCtl
    if(!$pgService -and (Get-NetTCPConnection -State Listen -LocalPort $state.dbPort -ErrorAction SilentlyContinue)){throw '선택한 PostgreSQL 포트를 다른 프로그램이 사용 중입니다. 포트를 바꾸거나 기존 서버 사용을 선택해 주세요.'}
    if(!(Test-Path -LiteralPath (Join-Path $pgData 'PG_VERSION'))){
-    $pwFile=Join-Path $configDir '.pg-init-password'
-    try{Write-ProtectedText $pwFile $values['spring.datasource.password'];Invoke-RuntimeCommand 'PostgreSQL 초기화' $initdb ('-D "'+$pgData+'" -U "'+$values['spring.datasource.username']+'" --encoding=UTF8 --locale=C --auth-host=scram-sha-256 --auth-local=trust "--pwfile='+$pwFile+'"')}
-    finally{if(Test-Path -LiteralPath $pwFile){Remove-Item -LiteralPath $pwFile -Force}}
+    Initialize-PostgresData $initdb $pgData $values['spring.datasource.username'] $values['spring.datasource.password']
     [IO.File]::AppendAllText((Join-Path $pgData 'postgresql.conf'),"`nlisten_addresses = '127.0.0.1'`nport = $($state.dbPort)`n",[Text.UTF8Encoding]::new($false))
    }
    if(!$pgService){Invoke-RuntimeCommand 'PostgreSQL 서비스 등록' $pgCtl ('register -N CheckListPostgreSQL -D "'+$pgData+'" -S auto')}
