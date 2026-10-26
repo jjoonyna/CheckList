@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$Java21,[switch]$SkipBuild,[switch]$CompileInstaller,[string]$Version='0.0.3')
+param([Parameter(Mandatory=$true)][string]$Java21,[switch]$SkipBuild,[switch]$CompileInstaller,[string]$Version='0.0.4')
 $ErrorActionPreference='Stop'
 [Net.ServicePointManager]::SecurityProtocol=[Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 $root=Split-Path -Parent $PSScriptRoot
@@ -78,7 +78,7 @@ Start-PackageStage '앱·서비스·라이선스 스테이징'
 Copy-Item -LiteralPath $jar.FullName -Destination (Join-Path $stage 'checklist.jar')
 Copy-Item -LiteralPath $winsw -Destination (Join-Path $stage 'checklist-service.exe')
 Copy-Item -LiteralPath $winsw -Destination (Join-Path $stage 'redis-service.exe')
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install-runtime.ps1'),(Join-Path $PSScriptRoot 'install-config.ps1'),(Join-Path $PSScriptRoot 'runtime-support.ps1'),(Join-Path $PSScriptRoot 'detect-services.ps1'),(Join-Path $PSScriptRoot 'stop-services.ps1'),(Join-Path $PSScriptRoot 'checklist-service.xml') -Destination $stage
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install-runtime.ps1'),(Join-Path $PSScriptRoot 'install-config.ps1'),(Join-Path $PSScriptRoot 'runtime-support.ps1'),(Join-Path $PSScriptRoot 'detect-services.ps1'),(Join-Path $PSScriptRoot 'stop-services.ps1'),(Join-Path $PSScriptRoot 'stop-checklist.ps1'),(Join-Path $PSScriptRoot 'checklist-service.xml') -Destination $stage
 $notices=Join-Path $stage 'licenses';New-Item -ItemType Directory -Force -Path $notices | Out-Null
 Get-PackageDownload -Url 'https://raw.githubusercontent.com/winsw/winsw/v2.12.0/LICENSE.txt' -File (Join-Path $notices 'WinSW-2.12.0.txt')
 Get-PackageDownload -Url 'https://raw.githubusercontent.com/jrsoftware/issrc/is-6_7_3/license.txt' -File (Join-Path $notices 'Inno-Setup-6.7.3.txt')

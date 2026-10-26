@@ -130,6 +130,12 @@ jobs:
           $initdb = Get-ChildItem build -Directory -Filter 'deploy-stage-*' | Sort-Object LastWriteTime -Descending | ForEach-Object { Join-Path $_.FullName 'postgresql/bin/initdb.exe' } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
           if (!$initdb) { throw '번들 PostgreSQL을 찾지 못했습니다.' }
           ./scripts/postgres-permissions.test.ps1 -Initdb $initdb
+      - name: 실제 설치·실패 처리·구성요소 제거 검사
+        shell: powershell
+        run: |
+          ./scripts/install-log-access.test.ps1
+          ./scripts/installer-mode.test.ps1 -Compiler (Join-Path $PWD 'tools-cache/deploy/inno-6.7.3/ISCC.exe')
+          ./scripts/uninstaller.test.ps1 -Compiler (Join-Path $PWD 'tools-cache/deploy/inno-6.7.3/ISCC.exe') -WinSW (Join-Path $PWD 'tools-cache/deploy/WinSW-2.12.0.exe')
       - name: 실제 Redis 번들 실행 검사
         shell: pwsh
         run: |

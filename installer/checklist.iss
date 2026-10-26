@@ -1,5 +1,5 @@
 ﻿#ifndef AppVersion
-  #define AppVersion "0.0.3"
+  #define AppVersion "0.0.4"
 #endif
 #ifndef StageDir
   #define StageDir "..\build\deploy-stage"
@@ -19,21 +19,26 @@ WizardSizePercent=120,130
 OutputDir={#OutputDir}
 OutputBaseFilename=checklist-setup-{#AppVersion}
 Uninstallable=yes
+UninstallLogMode=overwrite
 CloseApplications=yes
 Compression=lzma2
 SolidCompression=yes
 [Languages]
 Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 [Files]
-Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#StageDir}\*"; DestDir: "{app}"; Excludes: "\postgresql\*,\redis\*,\redis-service.exe,\licenses\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#StageDir}\postgresql\*"; DestDir: "{app}\postgresql"; Flags: ignoreversion recursesubdirs createallsubdirs uninsneveruninstall
+Source: "{#StageDir}\redis\*"; DestDir: "{app}\redis"; Flags: ignoreversion recursesubdirs createallsubdirs uninsneveruninstall
+Source: "{#StageDir}\redis-service.exe"; DestDir: "{app}"; Flags: ignoreversion uninsneveruninstall
+Source: "{#StageDir}\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion recursesubdirs createallsubdirs uninsneveruninstall
 Source: "{#StageDir}\detect-services.ps1"; Flags: dontcopy
 Source: "{#StageDir}\install-config.ps1"; Flags: dontcopy
 Source: "{#StageDir}\runtime-support.ps1"; Flags: dontcopy
 Source: "{#StageDir}\stop-services.ps1"; Flags: dontcopy
+[Icons]
+Name: "{autoprograms}\CheckList\CheckList 종료"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\stop-checklist.ps1"" -Root ""{app}"""; WorkingDir: "{app}"; Flags: runminimized
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\jre"
-Type: filesandordirs; Name: "{app}\postgresql"
-Type: filesandordirs; Name: "{app}\redis"
 Type: filesandordirs; Name: "{app}\checklist.jar"
 [Code]
 var
@@ -42,12 +47,36 @@ var
   PgCandidates, RedisCandidates: TNewComboBox;
   ShowPgPassword, ShowRedisPassword: TNewCheckBox;
   Progress: TOutputMarqueeProgressWizardPage;
+  InstallModePage: TOutputMsgWizardPage;
   DetectionFile, LastSettingsRoot: String;
+  RemoveRedisOnUninstall: Boolean;
   LastPgMode, LastRedisMode, LastPgCandidate, LastRedisCandidate: Integer;
 
 function PowerShellPath: String;
 begin
   Result := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+end;
+
+function IsUpdateInstall: Boolean;
+begin
+  Result := FileExists(AddBackslash(WizardDirValue)+'config\application.properties');
+end;
+
+function InstallationModeText: String;
+begin
+  if IsUpdateInstall then Result := '업데이트' else Result := '신규 설치';
+end;
+
+procedure RefreshInstallationMode;
+begin
+  InstallModePage.Caption := 'CheckList '+InstallationModeText;
+  if IsUpdateInstall then begin
+    InstallModePage.Description := '기존 설정을 사용하는 설치를 찾았습니다.';
+    InstallModePage.MsgLabel.Caption := '선택한 폴더의 CheckList를 업데이트합니다.'+#13#10+#13#10+'기존 서버 연결 설정·DB·첨부 데이터를 유지하고, 프로그램 갱신 후 서비스를 다시 시작합니다.'+#13#10+#13#10+'설치 폴더: '+WizardDirValue;
+  end else begin
+    InstallModePage.Description := '서버 연결 설정을 입력하고 설치를 진행합니다.';
+    InstallModePage.MsgLabel.Caption := '선택한 폴더에 CheckList를 신규 설치합니다.'+#13#10+#13#10+'다음 화면에서 PostgreSQL과 Redis의 사용 방식 및 연결 정보를 설정합니다. 이전에 실패한 설치 설정이 있으면 복원합니다.'+#13#10+#13#10+'설치 폴더: '+WizardDirValue;
+  end;
 end;
 
 procedure OutputLine(const S: String; const Error, FirstLine: Boolean);
@@ -98,7 +127,8 @@ begin
   DetectionFile := ExpandConstant('{tmp}\checklist-detection.ini');
   if not Exec(PowerShellPath, '-NoProfile -ExecutionPolicy Bypass -File "'+ExpandConstant('{tmp}\detect-services.ps1')+'" -OutputFile "'+DetectionFile+'"', '', SW_HIDE, ewWaitUntilTerminated, Code) then
     Log('자동 탐지를 시작하지 못했습니다. 직접 입력을 사용합니다.');
-  PgMode := CreateInputOptionPage(wpSelectDir, 'PostgreSQL 설치 방식', '기존 서버를 사용하거나 이 PC에 새로 설치합니다.', '기존 서버가 다른 PC에 있거나 목록에 없으면 다음 화면에서 주소를 입력하세요.', True, False);
+  InstallModePage := CreateOutputMsgPage(wpSelectDir, '설치 방식 확인', '선택한 설치 폴더를 확인합니다.', '');
+  PgMode := CreateInputOptionPage(InstallModePage.ID, 'PostgreSQL 설치 방식', '기존 서버를 사용하거나 이 PC에 새로 설치합니다.', '기존 서버가 다른 PC에 있거나 목록에 없으면 다음 화면에서 주소를 입력하세요.', True, False);
   PgMode.Add('기존 PostgreSQL 서버 사용'); PgMode.Add('이 PC에 PostgreSQL 새로 설치'); AddCandidates(PgMode,PgCandidates,'PostgreSQL');
   PgDetails := CreateInputQueryPage(PgMode.ID, 'PostgreSQL 연결 설정', '기본값과 탐지 결과를 수정할 수 있습니다.', '새로 설치할 경우 기본값이 채워집니다. 기존 서버 계정과 비밀번호는 직접 입력하세요.');
   PgDetails.Add('서버 주소:',False); PgDetails.Add('포트:',False); PgDetails.Add('데이터베이스 이름:',False); PgDetails.Add('계정:',False); PgDetails.Add('비밀번호:',True);
@@ -118,7 +148,7 @@ end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
-  Result := ((PageID=PgMode.ID) or (PageID=PgDetails.ID) or (PageID=RedisMode.ID) or (PageID=RedisDetails.ID)) and FileExists(ExpandConstant('{app}\config\application.properties'));
+  Result := ((PageID=PgMode.ID) or (PageID=PgDetails.ID) or (PageID=RedisMode.ID) or (PageID=RedisDetails.ID)) and IsUpdateInstall;
 end;
 
 function ValidPort(Value: String): Boolean;
@@ -152,7 +182,7 @@ function NextButtonClick(CurPageID: Integer): Boolean;
 var Index: String;
 begin
   Result := True;
-  if CurPageID=wpSelectDir then LoadPendingSettings;
+  if CurPageID=wpSelectDir then begin LoadPendingSettings; RefreshInstallationMode; end;
   if (CurPageID=PgMode.ID) and ((LastPgMode<>PgMode.SelectedValueIndex) or (LastPgCandidate<>PgCandidates.ItemIndex)) then begin
     PgDetails.Values[2] := 'checklist'; PgDetails.Values[3] := 'checklist';
     if PgMode.SelectedValueIndex=1 then begin
@@ -205,17 +235,28 @@ begin
   if not SaveStringToFile(Path,Utf8Encode(Value),False) then RaiseException('설정 파일을 저장하지 못했습니다.');
 end;
 
+function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
+begin
+  Result := '설치 방식: '+InstallationModeText+NewLine+NewLine+MemoDirInfo;
+  if IsUpdateInstall then Result := Result+NewLine+NewLine+'기존 설정·DB·첨부 데이터를 유지하고 프로그램을 갱신합니다.'
+  else Result := Result+NewLine+NewLine+'입력한 서버 연결 설정으로 프로그램과 서비스를 설치합니다.';
+  if MemoGroupInfo<>'' then Result := Result+NewLine+NewLine+MemoGroupInfo;
+  if MemoTasksInfo<>'' then Result := Result+NewLine+NewLine+MemoTasksInfo;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var Code: Integer; Started: Boolean; Params, Settings, ErrorText: String; RawError: AnsiString;
 begin
   if CurStep=ssInstall then begin
+    Log('설치 방식: '+InstallationModeText);
     if FileExists(ExpandConstant('{app}\checklist-service.exe')) then
       if (not Exec(PowerShellPath,'-NoProfile -ExecutionPolicy Bypass -File "'+ExpandConstant('{tmp}\stop-services.ps1')+'" -Root "'+ExpandConstant('{app}')+'"','',SW_HIDE,ewWaitUntilTerminated,Code)) or (Code<>0) then RaiseException('기존 서비스 중단에 실패했습니다. 실행 중인 서비스와 설치 경로를 확인해 주세요.');
   end;
   if CurStep=ssPostInstall then begin
     Settings := ExpandConstant('{app}\config\setup-input.json');
     Params := '-NoProfile -ExecutionPolicy Bypass -File "'+ExpandConstant('{app}\install-runtime.ps1')+'" -Root "'+ExpandConstant('{app}')+'"';
-    if not FileExists(ExpandConstant('{app}\config\application.properties')) then begin SaveSettings(Settings); Params := Params+' -SettingsFile "'+Settings+'"'; end;
+    if IsUpdateInstall then Params := Params+' -Action upgrade'
+    else begin SaveSettings(Settings); Params := Params+' -SettingsFile "'+Settings+'"'; end;
     Progress.Show;
     try
       Progress.Animate;
@@ -228,11 +269,29 @@ begin
     finally Progress.Hide; DeleteFile(Settings); end;
   end;
 end;
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-var Code: Integer;
+function InitializeUninstall: Boolean;
+var Choice: Integer;
 begin
-  if CurUninstallStep=usUninstall then
-    if (not Exec(PowerShellPath,'-NoProfile -ExecutionPolicy Bypass -File "'+ExpandConstant('{app}\install-runtime.ps1')+'" -Action uninstall -Root "'+ExpandConstant('{app}')+'"','',SW_HIDE,ewWaitUntilTerminated,Code)) or (Code<>0) then RaiseException('서비스 해제에 실패했습니다. 데이터를 보존하고 제거를 중단합니다.');
+  Result := True;
+  RemoveRedisOnUninstall := False;
+  if FileExists(ExpandConstant('{app}\config\bundled-redis.marker')) then begin
+    Choice := SuppressibleMsgBox('CheckList 전용 Redis도 함께 삭제할까요?'+#13#10+#13#10+'예: Redis 프로그램·서비스·저장 데이터·설정을 모두 삭제합니다.'+#13#10+'아니요: Redis를 그대로 남깁니다.'+#13#10+#13#10+'PostgreSQL과 업무·첨부 데이터는 삭제하지 않습니다.', mbConfirmation, MB_YESNOCANCEL or MB_DEFBUTTON2, IDNO);
+    if Choice=IDCANCEL then Result := False
+    else RemoveRedisOnUninstall := Choice=IDYES;
+  end;
+end;
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var Code: Integer; Params, ErrorText: String; RawError: AnsiString;
+begin
+  if CurUninstallStep=usUninstall then begin
+    Params := '-NoProfile -ExecutionPolicy Bypass -File "'+ExpandConstant('{app}\install-runtime.ps1')+'" -Action uninstall -Root "'+ExpandConstant('{app}')+'"';
+    if RemoveRedisOnUninstall then Params := Params+' -RemoveRedis';
+    if (not Exec(PowerShellPath,Params,'',SW_HIDE,ewWaitUntilTerminated,Code)) or (Code<>0) then begin
+      ErrorText := '제거를 완료하지 못했습니다. 남아 있는 파일·데이터와 로그를 확인해 주세요.';
+      if LoadStringFromFile(ExpandConstant('{app}\logs\install-error.txt'),RawError) then ErrorText := ErrorText+#13#10+Utf8Decode(RawError);
+      RaiseException(ErrorText);
+    end;
+  end;
 end;
 procedure DeinitializeSetup;
 begin if DetectionFile<>'' then DeleteFile(DetectionFile); end;

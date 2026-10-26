@@ -69,11 +69,13 @@ npm run dev
 .\scripts\package-deploy.ps1 -Java21 'C:\Java\jdk\bin\java.exe' -CompileInstaller
 ```
 
-출력은 `dist/checklist-setup-0.0.3.exe`입니다. 빌드에는 Node.js와 도구 다운로드 네트워크가 필요합니다. 설치한 앱 실행에는 번들 JRE를 사용합니다.
+출력은 `dist/checklist-setup-0.0.4.exe`입니다. 빌드에는 Node.js와 도구 다운로드 네트워크가 필요합니다. 설치한 앱 실행에는 번들 JRE를 사용합니다.
 
 설치 프로그램은 관리자 권한을 요구합니다. PostgreSQL 18.6과 Redis 8.10.2 Windows 커뮤니티 빌드가 EXE에 포함되어 있으며, 설치 마법사에서 각각 **기존 서버 사용 / 이 PC에 새로 설치**를 선택합니다. PostgreSQL만 설치된 PC에서는 PostgreSQL은 기존 사용, Redis는 신규 설치를 선택하면 됩니다. WSL·Docker·별도 Java 설치는 필요하지 않습니다.
 
-설치 순서는 **설치 폴더 → PostgreSQL 설치 방식·연결 설정 → Redis 설치 방식·연결 설정 → 파일 복사 → DB/Redis 준비 및 연결 확인 → CheckList 서비스 시작**입니다. PowerShell 콘솔은 표시하지 않으며 진행 상황과 오류를 설치 마법사에 표시합니다.
+설치 폴더를 선택하면 **신규 설치 / 업데이트**를 자동으로 안내합니다. 기존 완료 설정이 있으면 업데이트로 진행하며 연결 설정 입력을 건너뛰고 기존 설정·DB·첨부를 유지합니다. 완료 설정이 없으면 신규 설치로 진행하고, 실패한 설치의 임시 설정이 있으면 복원합니다. 제거 후 설정을 보존한 폴더에 다시 설치하는 경우에도 기존 환경을 재사용합니다.
+
+신규 설치 순서는 **설치 폴더 → 신규 설치 안내 → PostgreSQL 설치 방식·연결 설정 → Redis 설치 방식·연결 설정 → 파일 복사 → DB/Redis 준비 및 연결 확인 → CheckList 서비스 시작**입니다. 업데이트는 **설치 폴더 → 업데이트 안내 → 기존 서비스 중단 → 프로그램 갱신 → 기존 설정으로 서비스 재시작** 순서입니다. PowerShell 콘솔은 표시하지 않으며 진행 상황과 오류를 설치 마법사에 표시합니다.
 
 기존 서버는 설치 PC의 실행 프로세스 수신 포트와 등록 서비스 설정을 자동 탐지하고 후보를 제공합니다. 선택한 주소·포트는 수정할 수 있으며 탐지되지 않거나 다른 PC의 서버를 사용하면 직접 입력합니다. 계정·비밀번호는 자동으로 읽지 않습니다. 기존 PostgreSQL 계정과 비밀번호, Redis 비밀번호(사용하는 경우)를 입력합니다.
 
@@ -81,13 +83,13 @@ npm run dev
 
 신규 PostgreSQL은 `CheckListPostgreSQL`, Redis는 `CheckListRedis`, 앱은 `CheckList` Windows 서비스로 등록합니다. 이 설치가 소유한 서비스만 관리하며 다른 경로의 같은 이름 서비스를 덮어쓰지 않습니다. Redis는 로컬 주소에만 바인딩하고 비밀번호와 데이터 저장을 설정합니다. 다른 PC의 사용자는 앱 웹 주소에 접속하며 번들 Redis에 직접 연결할 필요가 없습니다.
 
-설정은 설치 폴더의 `config/`, 첨부와 번들 DB는 `data/`, 로그는 `logs/`에 둡니다. 설정 파일은 관리자/SYSTEM으로 접근을 제한합니다. 실패한 초기 설정은 보호된 `config/setup-pending.json`에 보존하고 재실행 시 마법사에 복원합니다. 입력 파일은 성공·실패 후 제거하고, DB·Redis 연결 확인이 성공해야 완료 설정으로 승격합니다. 제거 시 DB·Redis·첨부 데이터와 설정은 보존하고 앱이 설치한 서비스만 해제합니다. 기존 완료 설정이 있으면 재설치 시 입력 화면을 건너뛰고 기존 설정을 유지합니다. 구성요소 고지는 설치 폴더의 `THIRD-PARTY-NOTICES.txt`, `licenses/`, JRE의 `legal/`을 확인합니다.
+설정은 설치 폴더의 `config/`, 첨부와 번들 DB는 `data/`, 로그는 `logs/`에 둡니다. 설정 파일은 관리자/SYSTEM으로 접근을 제한합니다. 실패한 초기 설정은 보호된 `config/setup-pending.json`에 보존하고 재실행 시 마법사에 복원합니다. 입력 파일은 성공·실패 후 제거하고, DB·Redis 연결 확인이 성공해야 완료 설정으로 승격합니다. Windows 설치된 앱에서 CheckList 제거 또는 설치 폴더의 `unins000.exe`를 실행하면 앱을 제거합니다. PostgreSQL 프로그램·서비스·데이터와 앱 설정·업무·첨부 데이터는 남깁니다. CheckList 전용 Redis가 있으면 삭제 여부를 묻고, 삭제를 선택하면 Redis 프로그램·서비스·저장 데이터·설정을 함께 제거합니다. 아니요를 선택하면 Redis를 그대로 남기며 취소하면 제거를 시작하지 않습니다. 외부 Redis 서버는 제거하지 않습니다. 기존 완료 설정이 있으면 재설치 시 입력 화면을 건너뛰고 기존 설정을 유지합니다. 구성요소 고지는 설치 폴더의 `THIRD-PARTY-NOTICES.txt`, `licenses/`, JRE의 `legal/`을 확인합니다.
 
 ## 확인 범위와 남은 항목
 
 2026-10-22 기준 백엔드 35개, 프론트 8개 테스트와 실제 브라우저 기본 9개·추가 10개 흐름이 통과했습니다. 실제 GitHub 공개 이슈 조회·가져오기, DB/Redis 연결, 첨부 다운로드를 확인했고 통합 JAR과 EXE를 생성했습니다.
 
-2026-10-26에는 기본 `Program Files/CheckList` 경로에서 PostgreSQL 초기화 권한 오류를 수정하고, 실패한 설치 재시도·PostgreSQL/Redis/앱 서비스 등록과 시작·Redis 인증·앱 응답을 실제 검증했습니다. 서비스 제거는 대역 검사 범위입니다. Docker Compose 실행, 비공개 GitHub PAT, 500MB 실파일 전송은 이번 검증 범위에 포함하지 않았습니다. 첨부 크기 경계는 서버 규칙 테스트로 확인했습니다.
+2026-10-26에는 기본 `Program Files/CheckList` 경로에서 PostgreSQL 초기화 권한 오류를 수정하고, 실패한 설치 재시도·PostgreSQL/Redis/앱 서비스 등록과 시작·Redis 인증·앱 응답을 실제 검증했습니다. 이후 분리된 시험 설치·실제 Windows 서비스에서 구버전 갱신, Redis 보존·삭제·취소, 다른 설치 서비스 보호, 실행 파일 누락 복구, 앱·전용 Redis 종료까지 6개 시나리오를 검증했습니다. Docker Compose 실행, 비공개 GitHub PAT, 500MB 실파일 전송은 이번 검증 범위에 포함하지 않았습니다. 첨부 크기 경계는 서버 규칙 테스트로 확인했습니다.
 
 편집자에서 제외할 계정이 하위 항목 담당자로 남아 있으면 서버가 변경을 거절하고 편집 창에 안내합니다. 기간·완료 상태에 관계없이 해당 트리를 검사하며 담당자를 먼저 변경하거나 미지정해야 합니다. 담당자를 자동 해제하지 않습니다.
 
@@ -98,7 +100,7 @@ MVP에는 메일 인증, 계층 이동·삭제, 댓글 수정·삭제, GitHub �
 
 main 대상 PR을 열거나 갱신하면 프론트·백엔드·릴리즈 규칙 테스트와 통합 JAR 빌드를 실행합니다. **PR이 main에 실제 통합된 뒤**에는 통합 결과 SHA로 다시 검증하고 Windows 설치 EXE를 생성한 다음 GitHub Releases에 게시합니다. PR을 통합하지 않고 닫으면 실행하지 않습니다.
 
-현재 버전은 `0.0.3`, 태그는 `v.0.0.3`입니다. `CHANGELOG.md`의 `## [0.0.3]` 절 본문을 릴리즈 설명으로 사용하고 `checklist-0.0.3.jar`와 `checklist-setup-0.0.3.exe`를 첨부합니다. 릴리즈 게시에는 해당 작업에만 `contents: write` 권한을 부여하며 나머지는 읽기 권한을 사용합니다.
+현재 버전은 `0.0.4`, 태그는 `v.0.0.4`입니다. `CHANGELOG.md`의 `## [0.0.4]` 절 본문을 릴리즈 설명으로 사용하고 `checklist-0.0.4.jar`와 `checklist-setup-0.0.4.exe`를 첨부합니다. 릴리즈 게시에는 해당 작업에만 `contents: write` 권한을 부여하며 나머지는 읽기 권한을 사용합니다.
 
 다음 릴리즈는 프론트 `package.json`·`package-lock.json`의 앱 버전, 백엔드 `build.gradle`, 설치 `checklist.iss`, `package-deploy.ps1`의 기본 버전을 함께 올리고 CHANGELOG에 같은 버전의 내용을 추가합니다. `node scripts/release.mjs`로 버전과 노트를 확인하고 `node --test scripts/release.test.mjs`로 규칙을 검증합니다. 버전 불일치나 누락·중복·빈 노트는 빌드를 실패시킵니다. 같은 버전이 이미 게시됐다면 릴리즈는 유지하고 새 결과물은 Actions에서 확인합니다. 기존 태그나 미완료 초안은 덮어쓰지 않고 실패시켜 수동 확인하도록 합니다.
 
@@ -121,3 +123,16 @@ PostgreSQL 아카이브는 7-Zip으로 XZ를 풀고 그 안의 TAR를 추출합�
 PostgreSQL 초기화 중에는 현재 설치 계정에 데이터 폴더 쓰기와 임시 비밀번호 파일 읽기만 허용하며, 성공·실패 후 임시 권한과 파일을 정리합니다. 설정 폴더 전체의 관리자/SYSTEM 접근 제한은 유지합니다. 관리자 PowerShell에서 `scripts/postgres-permissions.test.ps1 -Initdb <설치 폴더의 postgresql/bin/initdb.exe>`로 실제 Program Files 초기화·실패 정리·설정 폴더 권한 보존을 검사할 수 있습니다.
 
 설치 입력 규칙은 `scripts/install-config.test.ps1`, 4가지 설치 조합·실패 재시도·소유권·보존 검사는 `scripts/installer-flow.test.ps1`로 검증합니다. 번들 Redis 실행 검사는 `scripts/redis-bundle.test.ps1 -ServerPath <redis-server.exe>`를 사용합니다. Redis·Cygwin·OpenSSL·GCC·libiconv/libintl·zlib 원문 고지와 소스 입수 안내는 설치 폴더 `licenses/`에 보존합니다. Redis Windows 빌드는 커뮤니티 배포판이며 Redis 공식 Windows 배포판은 아닙니다.
+
+제거 검사는 관리자 PowerShell에서 `scripts/uninstaller.test.ps1 -Compiler <ISCC.exe> -WinSW <WinSW.exe>`로 실행합니다. 실제 설치와 분리된 시험 경로·고유 이름의 서비스로 구버전 갱신 후 PostgreSQL 보존, Redis 보존/삭제/취소 및 제거 실패 시 파일 보존을 확인합니다.
+
+시작 메뉴의 **CheckList → CheckList 종료**를 실행하면 관리자 권한 확인 후 앱과 CheckList 전용 Redis만 종료합니다. 서비스 등록·프로그램·데이터는 지우지 않고 PostgreSQL과 외부 Redis는 계속 실행합니다.
+
+
+신규 설치·업데이트 안내 검사는 `scripts/installer-mode.test.ps1 -Compiler <ISCC.exe>`로 실행합니다. 실제 Inno에서 신규 설치, 기존 설정, 제거 후 보존된 설정, 실패 재시도, 설치 폴더 변경에 따른 안내·설정 입력 화면·설치 직전 요약을 검사하며 파일 복사 전에 중단합니다.
+
+
+설치·서비스 로그는 설치를 실행한 계정에서 일반 권한으로 읽을 수 있습니다. 로그 쓰기는 관리자/SYSTEM에 유지하며, 비밀번호가 포함된 `config/`는 계속 관리자/SYSTEM만 접근합니다. 설치가 성공하면 이전 `logs/install-error.txt` 표시를 해제하고 과거 내역은 `logs/install.log`에 남깁니다. 권한 검사는 관리자 PowerShell에서 `scripts/install-log-access.test.ps1`로 준비한 뒤, 출력된 경로를 같은 계정의 일반 PowerShell에서 `scripts/install-log-access.test.ps1 -VerifyRoot <시험 경로>`로 확인합니다.
+
+
+설치·업데이트에 실패하면 CheckList 앱 서비스만 중단합니다. 기존 보존 동작대로 서비스 등록·설치 파일·설정·업무·첨부 데이터를 남기며 PostgreSQL과 Redis는 중단하거나 제거하지 않습니다. 앱 중단에도 문제가 생기면 최초 설치 실패 원인과 중단 실패 내용을 함께 기록합니다. 자동 재시도는 수행하지 않습니다.
