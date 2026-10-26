@@ -1,6 +1,8 @@
 ﻿[CmdletBinding()]
 param([ValidateSet('install','upgrade','uninstall')][string]$Action='install',[Parameter(Mandatory=$true)][string]$Root,[string]$SettingsFile,[switch]$RemoveRedis)
 $ErrorActionPreference='Stop'
+# Inno Setup은 표준 출력을 UTF-8로 읽는다. 서버 코드 페이지와 무관하게 맞춘다.
+[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 $Root=[IO.Path]::GetFullPath($Root)
 . (Join-Path $PSScriptRoot 'install-config.ps1')
 . (Join-Path $PSScriptRoot 'runtime-support.ps1')

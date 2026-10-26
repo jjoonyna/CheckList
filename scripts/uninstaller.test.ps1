@@ -21,15 +21,67 @@ public static class UninstallDialogTest {
  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h,out uint id);
  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h,uint m,IntPtr w,IntPtr l);
  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h,IntPtr a,int x,int y,int w,int z,uint f);
+ [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr h,int id);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr h,StringBuilder b,int n);
+ public static string Class(IntPtr h){var b=new StringBuilder(256);GetClassName(h,b,b.Capacity);return b.ToString();}
+ public static string Contents(IntPtr h){var b=new StringBuilder(Text(h));EnumChildWindows(h,(c,v)=>{b.Append(" | ").Append(Text(c));return true;},IntPtr.Zero);return b.ToString();}
+ public static IntPtr FindError(int[] ids){
+  var h=Find("","Runtime error",ids);if(h!=IntPtr.Zero)return h;
+  h=Find("","제거를 완료하지 못했습니다",ids);if(h!=IntPtr.Zero)return h;
+  IntPtr found=IntPtr.Zero;
+  EnumWindows((w,d)=>{uint pid;GetWindowThreadProcessId(w,out pid);if(Array.IndexOf(ids,(int)pid)>=0 && Class(w)=="#32770" && GetDlgItem(w,1)!=IntPtr.Zero && GetDlgItem(w,2)==IntPtr.Zero && GetDlgItem(w,6)==IntPtr.Zero && GetDlgItem(w,7)==IntPtr.Zero){found=w;return false;}return true;},IntPtr.Zero);return found;
+ }
+ public static string Dump(int[] ids){var b=new StringBuilder();EnumWindows((h,d)=>{uint pid;GetWindowThreadProcessId(h,out pid);if(Array.IndexOf(ids,(int)pid)>=0)b.AppendLine("PID="+pid+" class="+Class(h)+" text="+Contents(h));return true;},IntPtr.Zero);return b.ToString();}
  public static string Text(IntPtr h){var b=new StringBuilder(4096);GetWindowText(h,b,b.Capacity);return b.ToString();}
- public static IntPtr Find(string title,string content,int[] ids){IntPtr result=IntPtr.Zero;EnumWindows((h,d)=>{uint pid;GetWindowThreadProcessId(h,out pid);if(Array.IndexOf(ids,(int)pid)>=0 && Text(h).Contains(title)){var b=new StringBuilder(Text(h));EnumChildWindows(h,(c,v)=>{b.Append(Text(c));return true;},IntPtr.Zero);if(b.ToString().Contains(content)){result=h;return false;}}return true;},IntPtr.Zero);return result;}
+ public static IntPtr Find(string title,string content,int[] ids){IntPtr result=IntPtr.Zero;EnumWindows((h,d)=>{uint pid;GetWindowThreadProcessId(h,out pid);if(Array.IndexOf(ids,(int)pid)>=0 && Text(h).IndexOf(title,StringComparison.OrdinalIgnoreCase)>=0){var b=new StringBuilder(Text(h));EnumChildWindows(h,(c,v)=>{b.Append(Text(c));return true;},IntPtr.Zero);if(b.ToString().IndexOf(content,StringComparison.OrdinalIgnoreCase)>=0){result=h;return false;}}return true;},IntPtr.Zero);return result;}
 }
 "@
 function Assert($Value,[string]$Message){if(!$Value){throw $Message}}
+function Stop-TestProcess([Diagnostics.Process]$Process){
+ try{if(!$Process.HasExited){& (Join-Path $env:SystemRoot 'System32/taskkill.exe') /PID $Process.Id /T /F 2>&1 | Out-Null;$null=$Process.WaitForExit(5000)}}catch{Write-Warning ('시험 프로세스 종료 확인 실패: '+$_.Exception.Message)}
+}
+function Get-TestProcessIds([int]$ProcessId){
+ $ids=[Collections.Generic.List[int]]::new();$ids.Add($ProcessId)
+ for($index=0;$index -lt $ids.Count;$index++){foreach($child in @(Get-CimInstance Win32_Process -Filter ('ParentProcessId='+$ids[$index]))){if(!$ids.Contains([int]$child.ProcessId)){$ids.Add([int]$child.ProcessId)}}}
+ return $ids.ToArray()
+}
+function Publish-TestLogs {
+ $destination=Join-Path $repo ('build/installer-test-logs/'+(Split-Path -Leaf $testBase))
+ foreach($file in @(Get-ChildItem -LiteralPath $testBase -Recurse -File | Where-Object Extension -in @('.log','.out','.error'))){
+  $path=Join-Path $destination $file.FullName.Substring($testBase.Length+1)
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $path) | Out-Null
+  Copy-Item -LiteralPath $file.FullName -Destination $path
+ }
+}
+function Test-DialogSearch {
+ $probe=@'
+Add-Type -AssemblyName System.Windows.Forms
+$form=New-Object Windows.Forms.Form
+$form.Text='제거 오류 창 검증';$form.ShowInTaskbar=$false
+$form.StartPosition='Manual';$form.Location=New-Object Drawing.Point(-32000,-32000)
+$box=New-Object Windows.Forms.TextBox
+$box.Multiline=$true;$box.ReadOnly=$true;$box.Dock='Fill'
+$box.Text='Runtime Error: 제거를 완료하지 못했습니다.'
+$form.Controls.Add($box)
+$timer=New-Object Windows.Forms.Timer;$timer.Interval=20000
+$timer.Add_Tick({$form.Close()});$timer.Start()
+[Windows.Forms.Application]::Run($form)
+'@
+ $path=Join-Path $testBase 'dialog-probe.ps1';[IO.File]::WriteAllText($path,$probe,[Text.UTF8Encoding]::new($true))
+ $process=Start-Process powershell.exe -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -File "'+$path+'"') -WindowStyle Hidden -PassThru
+ $null=$process.Handle
+ try{
+  $found=[IntPtr]::Zero
+  for($attempt=0;$attempt -lt 80;$attempt++){$found=[UninstallDialogTest]::FindError([int[]]@($process.Id));if($found -ne [IntPtr]::Zero){break};Start-Sleep -Milliseconds 100}
+  Assert ($found -ne [IntPtr]::Zero) '대문자 Runtime Error 창을 감지하지 못했습니다.'
+  Assert ([UninstallDialogTest]::FindError([int[]]@(-1)) -eq [IntPtr]::Zero) '다른 프로세스 창이 감지됐습니다.'
+  Write-Host '오류 창 대소문자 차이·시험 프로세스 범위 검사 통과'
+ }finally{Stop-TestProcess $process;$process.Dispose()}
+}
 function Run-Hidden([string]$File,[string]$Arguments,[string]$Log,[int]$ExpectedExit=0){
  $process=Start-Process -FilePath $File -ArgumentList $Arguments -WindowStyle Hidden -PassThru -RedirectStandardOutput ($Log+'.out') -RedirectStandardError ($Log+'.error')
  $null=$process.Handle
- try{$watch=[Diagnostics.Stopwatch]::StartNew();while(!$process.WaitForExit(200)){if($watch.Elapsed.TotalSeconds -gt 90){throw '시험 설치·서비스 명령 시간 초과'}};$process.Refresh();if($process.ExitCode -ne $ExpectedExit){throw ('시험 명령 실패: '+$File+' 종료='+$process.ExitCode)}}finally{$process.Dispose()}
+ try{$watch=[Diagnostics.Stopwatch]::StartNew();while(!$process.WaitForExit(200)){if($watch.Elapsed.TotalSeconds -gt 90){throw '시험 설치·서비스 명령 시간 초과'}};$process.Refresh();if($process.ExitCode -ne $ExpectedExit){throw ('시험 명령 실패: '+$File+' 종료='+$process.ExitCode)}}finally{Stop-TestProcess $process;$process.Dispose()}
 }
 function New-ServiceFixture([string]$Executable,[string]$Name){
  $arguments=[Security.SecurityElement]::Escape('-NoProfile -Command "Start-Sleep -Seconds 600"')
@@ -55,6 +107,8 @@ Type: filesandordirs; Name: "{app}\checklist.jar"
 "@
 $filesStart=$newSource.IndexOf('[Files]');$codeStart=$newSource.IndexOf('[Code]')
 $oldSource=($newSource.Substring(0,$filesStart)+$legacyFiles+"`n"+$newSource.Substring($codeStart)).Replace('UninstallLogMode=overwrite','UninstallLogMode=append')
+try{
+Test-DialogSearch
 foreach($case in $Cases){
  $id=[guid]::NewGuid().ToString('N');$prefix='CheckListRemovalTest'+$id;$root=Join-Path $testBase $case;$stage=Join-Path $root 'stage';$target=Join-Path $root 'installed';$output=Join-Path $root 'output';$title='제거검증'+$id
  foreach($directory in @('postgresql/bin','redis','jre','licenses')){New-Item -ItemType Directory -Force -Path (Join-Path $stage $directory) | Out-Null}
@@ -120,19 +174,26 @@ foreach($case in $Cases){
   $answered=$false;$errorShown=$false;$watch=[Diagnostics.Stopwatch]::StartNew()
   try{
    while(!$process.WaitForExit(100)){
-    if($watch.Elapsed.TotalSeconds -gt 90){throw 'Redis 선택 제거 시험 시간 초과'}
-    $windowPids=@($process.Id)+@(Get-CimInstance Win32_Process -Filter ("ParentProcessId="+$process.Id) | ForEach-Object {[int]$_.ProcessId})
+    if($watch.Elapsed.TotalSeconds -gt 90){
+     $ids=Get-TestProcessIds $process.Id
+     $diagnostic='case='+$case+' answered='+$answered+' errorShown='+$errorShown+[Environment]::NewLine+[UninstallDialogTest]::Dump([int[]]$ids)
+     [IO.File]::WriteAllText((Join-Path $root 'timeout.log'),$diagnostic,[Text.UTF8Encoding]::new($false))
+     Write-Warning $diagnostic
+     if(Test-Path -LiteralPath $log){Get-Content -LiteralPath $log -Tail 25 | Write-Host}
+     throw ('제거 시험 시간 초과: '+$case)
+    }
+    $windowPids=@(Get-TestProcessIds $process.Id)
     $dialog=[UninstallDialogTest]::Find('','CheckList 전용 Redis도 함께 삭제할까요?',[int[]]$windowPids)
     if(!$answered -and $dialog -ne [IntPtr]::Zero){
      [void][UninstallDialogTest]::SetWindowPos($dialog,[IntPtr]::Zero,-32000,-32000,0,0,0x15)
      $choice=if($case -eq 'remove'){6}elseif($case -eq 'cancel'){2}else{7}
      [void][UninstallDialogTest]::PostMessage($dialog,0x111,[IntPtr]$choice,[IntPtr]::Zero);$answered=$true
     }
-    $errorDialog=[UninstallDialogTest]::Find('','Runtime error',[int[]]$windowPids)
+    $errorDialog=[UninstallDialogTest]::FindError([int[]]$windowPids)
     if($errorDialog -ne [IntPtr]::Zero){[void][UninstallDialogTest]::PostMessage($errorDialog,0x111,[IntPtr]1,[IntPtr]::Zero);$errorShown=$true}
    }
    $process.Refresh();$exitCode=$process.ExitCode
-  }finally{$process.Dispose()}
+  }finally{Stop-TestProcess $process;$process.Dispose()}
   Assert $answered 'Redis 제거 선택 질문이 나타나지 않았습니다.'
   $shouldAbort=$case -in @('cancel','foreign-service')
   Assert (($exitCode -ne 0) -eq $shouldAbort) ('제거 종료 코드가 예상과 다릅니다: '+$case+'='+$exitCode)
@@ -150,7 +211,10 @@ foreach($case in $Cases){
   }
   if($shouldAbort){Assert (Test-Path (Join-Path $target 'checklist-service.exe')) '취소·실패 후 앱 파일이 삭제됐습니다.'}
   else{Assert (!(Test-Path (Join-Path $target 'checklist.jar'))) '앱 파일 제거 실패';Assert (!(Get-Service $prefix -ErrorAction SilentlyContinue)) '앱 서비스 제거 실패'}
-  if($case -eq 'foreign-service'){Assert $errorShown '다른 설치 서비스 충돌 안내가 누락됐습니다.'}
+  if($case -eq 'foreign-service'){
+   Assert $errorShown '다른 설치 서비스 충돌 안내가 누락됐습니다.'
+   Assert ([IO.File]::ReadAllText((Join-Path $target 'logs/install-error.txt')).Contains('동일 이름의 다른 서비스')) '예상한 서비스 소유권 오류가 아닙니다.'
+  }
   Write-Host ('실제 제거 검사 통과: '+$case+' (구버전 갱신·PostgreSQL 보존 포함)')
  }finally{
   foreach($name in $names){
@@ -159,4 +223,5 @@ foreach($case in $Cases){
   }
  }
 }
+}finally{try{Publish-TestLogs}catch{Write-Warning ('시험 로그 보관 실패: '+$_.Exception.Message)}}
 Write-Host ('실제 제거 검사 로그: '+$testBase)
