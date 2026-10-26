@@ -8,14 +8,21 @@ $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 Assert ([Security.Principal.WindowsPrincipal]::new($identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) '실제 재설치 프로세스 검사는 관리자 권한으로 실행해 주세요.'
 $id=[guid]::NewGuid().ToString('N');$serviceName='CheckListReinstallTest'+$id
 $base=[IO.Path]::GetFullPath((Join-Path $env:ProgramData ('CheckList reinstall test '+$id)))
-$root=Join-Path $base '설치 폴더';$processes=[Collections.Generic.List[Diagnostics.Process]]::new()
+$root=Join-Path $base 'installed app';$processes=[Collections.Generic.List[Diagnostics.Process]]::new()
 New-Item -ItemType Directory -Force -Path $root,(Join-Path $base 'classes') | Out-Null
 function Run-Test([string]$File,[string]$Arguments,[string]$Name,[int]$Expected=0){
  $process=Start-Process -FilePath $File -ArgumentList $Arguments -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $base ($Name+'.out')) -RedirectStandardError (Join-Path $base ($Name+'.error'))
  $null=$process.Handle
  try{
   Assert ($process.WaitForExit(60000)) ('시험 명령 시간 초과: '+$Name)
-  $process.Refresh();Assert ($process.ExitCode -eq $Expected) ('시험 명령 종료 코드 오류: '+$Name+'='+$process.ExitCode)
+  $process.Refresh()
+  if($process.ExitCode -ne $Expected){
+   foreach($extension in @('.out','.error')){
+    $log=Join-Path $base ($Name+$extension)
+    if(Test-Path -LiteralPath $log){Write-Host ('시험 명령 진단: '+$log);Get-Content -LiteralPath $log -Encoding UTF8 -Tail 40 -ErrorAction Continue | Write-Host}
+   }
+  }
+  Assert ($process.ExitCode -eq $Expected) ('시험 명령 종료 코드 오류: '+$Name+'='+$process.ExitCode)
  }finally{if(!$process.HasExited){$process.Kill();$process.WaitForExit()};$process.Dispose()}
 }
 function Start-Java([string]$Executable,[string]$Jar,[string]$Name){
@@ -67,7 +74,11 @@ try{
  Assert (!$differentExecutable.HasExited) '다른 실행 경로의 Java를 종료함'
  $differentExecutable.Kill();$differentExecutable.WaitForExit()
  Assert ([IO.File]::ReadAllText((Join-Path $root 'preserved.txt')) -eq '보존 표식') '기존 파일이 변경됨'
- Assert (Test-InstallJarArgument ('java -jar "'+$jar+'"') $root) '공백·한글 JAR 경로 판정 실패'
+ Assert (Test-InstallJarArgument ('java -jar "'+$jar+'"') $root) '공백 JAR 경로 판정 실패'
+ # 한글 경로는 소유권 판정에서 확인한다. Java 도구의 명령줄에는 코드 페이지 의존 경로를 전달하지 않는다.
+ $koreanRoot=Join-Path $base '설치 폴더';$koreanJar=Join-Path $koreanRoot 'checklist.jar'
+ Assert (Test-InstallJarArgument ('java -jar "'+$koreanJar+'"') $koreanRoot) '한글 JAR 경로 판정 실패'
+ Assert (!(Test-InstallJarArgument ('java -jar "'+$koreanJar+'"') $root)) '다른 한글 경로의 JAR를 소유 확인함'
  Assert (!(Test-InstallJarArgument 'java -jar checklist.jar' $root)) '상대 경로 JAR를 소유 확인함'
  Assert (!(Test-InstallJarArgument ('java Main -jar "'+$jar+'"') $root)) '업무 인자를 JAR 실행으로 오인함'
  Assert (!(Test-InstallJarArgument ('java -Dnote="-jar '+$jar+'" -jar "'+$otherJar+'"') $root)) '옵션 문자열을 JAR 실행으로 오인함'
