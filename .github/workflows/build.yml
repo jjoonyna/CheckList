@@ -88,6 +88,7 @@ jobs:
         shell: pwsh
         run: |
           ./scripts/package-support.test.ps1
+          ./scripts/package-licenses.test.ps1
           ./scripts/package-postgres.test.ps1
           ./scripts/install-config.test.ps1
           ./scripts/installer-flow.test.ps1
@@ -95,6 +96,7 @@ jobs:
         shell: powershell
         run: |
           ./scripts/package-support.test.ps1
+          ./scripts/package-licenses.test.ps1
           ./scripts/package-postgres.test.ps1
           ./scripts/install-config.test.ps1
           ./scripts/installer-flow.test.ps1

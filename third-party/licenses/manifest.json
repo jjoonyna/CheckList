@@ -1,0 +1,74 @@
+[
+    {
+        "file":  "PostgreSQL-18.6.txt",
+        "target":  "postgresql/LICENSE.txt",
+        "source":  "https://raw.githubusercontent.com/postgres/postgres/REL_18_STABLE/COPYRIGHT",
+        "sha256":  "3D6AF92FF8A4C2CDF69AFB1CF44EDEA727922F5CD0CF8B5F72B11CDECAC8FDFD"
+    },
+    {
+        "file":  "WinSW-2.12.0.txt",
+        "target":  "licenses/WinSW-2.12.0.txt",
+        "source":  "https://raw.githubusercontent.com/winsw/winsw/v2.12.0/LICENSE.txt",
+        "sha256":  "1CDF703C10A70E5973BF3ACF2A5EEABE7746237155B92DB2034AEAE26FDF7802"
+    },
+    {
+        "file":  "Inno-Setup-6.7.3.txt",
+        "target":  "licenses/Inno-Setup-6.7.3.txt",
+        "source":  "https://raw.githubusercontent.com/jrsoftware/issrc/is-6_7_3/license.txt",
+        "sha256":  "2E5346868C2A18434489824E11D65C3031620F792FEFC415D05F19CD441ABF5C"
+    },
+    {
+        "file":  "Redis-8.10.2.txt",
+        "target":  "licenses/Redis-8.10.2.txt",
+        "source":  "https://raw.githubusercontent.com/redis/redis/8.10.2/LICENSE.txt",
+        "sha256":  "4A0E416B9537688F30DFE69DDACEB2CA64D96B7DF02A0A6760D376890DDC4E40"
+    },
+    {
+        "file":  "Redis-Windows-8.10.2.txt",
+        "target":  "licenses/Redis-Windows-8.10.2.txt",
+        "source":  "https://raw.githubusercontent.com/redis-windows/redis-windows/8.10.2/LICENSE",
+        "sha256":  "C71D239DF91726FC519C6EB72D318EC65820627232B2F796219E87DCF35D0AB4"
+    },
+    {
+        "file":  "Cygwin-LGPLv3.txt",
+        "target":  "licenses/Cygwin-LGPLv3.txt",
+        "source":  "https://cygwin.com/COPYING.LIB",
+        "sha256":  "DA7EABB7BAFDF7D3AE5E9F223AA5BDC1EECE45AC569DC21B3B037520B4464768"
+    },
+    {
+        "file":  "Cygwin-GPLv3.txt",
+        "target":  "licenses/Cygwin-GPLv3.txt",
+        "source":  "https://cygwin.com/COPYING",
+        "sha256":  "8CEB4B9EE5ADEDDE47B31E975C1D90C73AD27B6B165A1DCD80C7C545EB65B903"
+    },
+    {
+        "file":  "OpenSSL-3.5.8.txt",
+        "target":  "licenses/OpenSSL-3.5.8.txt",
+        "source":  "https://raw.githubusercontent.com/openssl/openssl/openssl-3.5.8/LICENSE.txt",
+        "sha256":  "7D5450CB2D142651B8AFA315B5F238EFC805DAD827D91BA367D8516BC9D49E7A"
+    },
+    {
+        "file":  "GCC-14.4.0-Runtime-Exception.txt",
+        "target":  "licenses/GCC-14.4.0-Runtime-Exception.txt",
+        "source":  "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.4.0/COPYING.RUNTIME",
+        "sha256":  "9D6B43CE4D8DE0C878BF16B54D8E7A10D9BD42B75178153E3AF6A815BDC90F74"
+    },
+    {
+        "file":  "GCC-14.4.0-GPLv3.txt",
+        "target":  "licenses/GCC-14.4.0-GPLv3.txt",
+        "source":  "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.4.0/COPYING3",
+        "sha256":  "8CEB4B9EE5ADEDDE47B31E975C1D90C73AD27B6B165A1DCD80C7C545EB65B903"
+    },
+    {
+        "file":  "libiconv-libintl-LGPLv2.1.txt",
+        "target":  "licenses/libiconv-libintl-LGPLv2.1.txt",
+        "source":  "https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt",
+        "sha256":  "20E50FE7AAE3E56378EBF0417D9DE904F55A0E61E4DF315333E632A4D3555D95"
+    },
+    {
+        "file":  "zlib-1.3.2-license-and-header.txt",
+        "target":  "licenses/zlib-1.3.2-license-and-header.txt",
+        "source":  "https://raw.githubusercontent.com/madler/zlib/v1.3.2/zlib.h",
+        "sha256":  "818667D6AB6A37FE7469CB06A7F0CB2C2CB2F2C948A03E5ACCF1A4A74BF3020A"
+    }
+]

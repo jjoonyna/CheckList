@@ -3,3 +3,6 @@
 **/gradlew text eol=lf
 *.bat text eol=crlf
 *.jar binary
+
+# 고지 원문은 체크아웃 시 줄바꿈을 변환하지 않는다.
+/third-party/licenses/*.txt -text
