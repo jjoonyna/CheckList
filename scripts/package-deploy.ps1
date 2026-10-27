@@ -53,7 +53,6 @@ $tarCache=Join-Path $cache ('postgres-tar-'+(Get-Date -Format 'yyyyMMddHHmmss'))
 $tarSource=[IO.Path]::GetFullPath((Join-Path $stage 'postgres-tar'))
 if(!$tarSource.StartsWith([IO.Path]::GetFullPath($stage)+[IO.Path]::DirectorySeparatorChar) -or ![IO.Path]::GetFullPath($tarCache).StartsWith([IO.Path]::GetFullPath($cache)+[IO.Path]::DirectorySeparatorChar)){throw '중간 TAR 이동 범위 오류'}
 Move-Item -LiteralPath $tarSource -Destination $tarCache
-Get-PackageDownload -Url 'https://raw.githubusercontent.com/postgres/postgres/REL_18_STABLE/COPYRIGHT' -File (Join-Path $pg 'LICENSE.txt')
 Start-PackageStage 'JRE 압축 해제 및 복사'
 $jreExtract=Join-Path $stage 'jre-extract';Expand-Archive -LiteralPath $jreZip -DestinationPath $jreExtract
 $jreRoot=Get-ChildItem -LiteralPath $jreExtract -Directory | Where-Object {Test-Path -LiteralPath (Join-Path $_.FullName 'bin/java.exe')} | Select-Object -First 1
@@ -80,17 +79,7 @@ Copy-Item -LiteralPath $winsw -Destination (Join-Path $stage 'checklist-service.
 Copy-Item -LiteralPath $winsw -Destination (Join-Path $stage 'redis-service.exe')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install-runtime.ps1'),(Join-Path $PSScriptRoot 'install-config.ps1'),(Join-Path $PSScriptRoot 'runtime-support.ps1'),(Join-Path $PSScriptRoot 'detect-services.ps1'),(Join-Path $PSScriptRoot 'stop-services.ps1'),(Join-Path $PSScriptRoot 'stop-checklist.ps1'),(Join-Path $PSScriptRoot 'checklist-service.xml') -Destination $stage
 $notices=Join-Path $stage 'licenses';New-Item -ItemType Directory -Force -Path $notices | Out-Null
-Get-PackageDownload -Url 'https://raw.githubusercontent.com/winsw/winsw/v2.12.0/LICENSE.txt' -File (Join-Path $notices 'WinSW-2.12.0.txt')
-Get-PackageDownload -Url 'https://raw.githubusercontent.com/jrsoftware/issrc/is-6_7_3/license.txt' -File (Join-Path $notices 'Inno-Setup-6.7.3.txt')
-Get-PackageDownload -Url 'https://raw.githubusercontent.com/redis/redis/8.10.2/LICENSE.txt' -File (Join-Path $notices 'Redis-8.10.2.txt')
-Get-PackageDownload -Url 'https://raw.githubusercontent.com/redis-windows/redis-windows/8.10.2/LICENSE' -File (Join-Path $notices 'Redis-Windows-8.10.2.txt')
-Get-PackageDownload -Url 'https://cygwin.com/COPYING.LIB' -File (Join-Path $notices 'Cygwin-LGPLv3.txt')
-Get-PackageDownload -Url 'https://cygwin.com/COPYING' -File (Join-Path $notices 'Cygwin-GPLv3.txt')
-Get-PackageDownload -Url 'https://raw.githubusercontent.com/openssl/openssl/openssl-3.5.8/LICENSE.txt' -File (Join-Path $notices 'OpenSSL-3.5.8.txt')
-Get-PackageDownload -Url 'https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.4.0/COPYING.RUNTIME' -File (Join-Path $notices 'GCC-14.4.0-Runtime-Exception.txt')
-Get-PackageDownload -Url 'https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.4.0/COPYING3' -File (Join-Path $notices 'GCC-14.4.0-GPLv3.txt')
-Get-PackageDownload -Url 'https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt' -File (Join-Path $notices 'libiconv-libintl-LGPLv2.1.txt')
-Get-PackageDownload -Url 'https://raw.githubusercontent.com/madler/zlib/v1.3.2/zlib.h' -File (Join-Path $notices 'zlib-1.3.2-license-and-header.txt')
+Copy-PackageLicenses -Source (Join-Path $root 'third-party/licenses') -Stage $stage
 $redisSources=@"
 Redis 8.10.2 원문 소스: https://github.com/redis/redis/archive/refs/tags/8.10.2.tar.gz
 Windows 빌드 소스·빌드 스크립트: https://github.com/redis-windows/redis-windows/archive/refs/tags/8.10.2.zip

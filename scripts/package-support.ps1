@@ -135,3 +135,32 @@ function Expand-PackagePostgres {
  if(!(Test-Path -LiteralPath (Join-Path $Destination 'bin/initdb.exe'))){throw 'PostgreSQL 압축 구조 오류: bin/initdb.exe가 없습니다.'}
  Write-PackageLog "PostgreSQL 추출 검증 완료: $Destination"
 }
+
+function Copy-PackageLicenses {
+ param([Parameter(Mandatory=$true)][string]$Source,[Parameter(Mandatory=$true)][string]$Stage)
+ $manifest=Join-Path $Source 'manifest.json'
+ if(!(Test-Path -LiteralPath $manifest -PathType Leaf)){throw '고지 원문 목록이 없습니다.'}
+ $entries=@(Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop | ForEach-Object {$_})
+ if(!$entries.Count){throw '고지 원문 목록이 비어 있습니다.'}
+ $files=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+ $targets=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+ # 모든 원문을 먼저 검증한다. 누락·변조 시 일부 고지만 복사한 산출물을 만들지 않는다.
+ foreach($entry in $entries){
+  if($entry.file -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*\.txt$' -or
+     $entry.target -notmatch '^(?:licenses/[A-Za-z0-9][A-Za-z0-9._-]*\.txt|postgresql/LICENSE\.txt)$' -or
+     $entry.sha256 -notmatch '^[A-Fa-f0-9]{64}$' -or $entry.source -notmatch '^https://'){
+   throw '고지 원문 목록의 파일·대상 경로·출처·해시 형식이 올바르지 않습니다.'
+  }
+  if(!$files.Add($entry.file) -or !$targets.Add($entry.target)){throw '고지 원문 목록에 중복 파일 또는 대상 경로가 있습니다.'}
+  $file=Join-Path $Source $entry.file
+  if(!(Test-Path -LiteralPath $file -PathType Leaf)){throw ('고지 원문 파일이 없습니다: '+$entry.file)}
+  if((Get-FileHash -LiteralPath $file -Algorithm SHA256 -ErrorAction Stop).Hash -ne $entry.sha256){throw ('고지 원문 SHA-256 불일치: '+$entry.file)}
+ }
+ foreach($entry in $entries){
+  $target=Join-Path $Stage $entry.target
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
+  Copy-Item -LiteralPath (Join-Path $Source $entry.file) -Destination $target -Force -ErrorAction Stop
+  if((Get-FileHash -LiteralPath $target -Algorithm SHA256 -ErrorAction Stop).Hash -ne $entry.sha256){throw ('고지 복사 SHA-256 불일치: '+$entry.target)}
+  Write-PackageLog ('원문 고지 복사·SHA-256 일치: '+$entry.target)
+ }
+}
