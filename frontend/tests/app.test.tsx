@@ -37,6 +37,82 @@ function mockApi() {
 }
 
 describe('체크리스트 사용자 흐름', () => {
+  async function login(user: ReturnType<typeof userEvent.setup>) {
+    render(<App />);
+    await user.type(screen.getByLabelText('이메일'), 'minji@example.com');
+    await user.type(screen.getByLabelText('비밀번호'), 'secure-pass-1');
+    await user.click(screen.getByRole('button', { name: '로그인', exact: true }));
+    await screen.findByRole('button', { name: '분기 보고서', exact: true });
+  }
+
+  it('처음에는 3단계를 펼치고 자식이 있는 항목에만 접기 버튼을 표시한다', async () => {
+    const user = userEvent.setup();
+    mockApi();
+    await login(user);
+    expect(screen.getByRole('button', { name: '분기 보고서 하위 항목 접기' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: '매출 자료 하위 항목 접기' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: '10월 수치 확인', exact: true })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /10월 수치 확인 하위 항목 (접기|펼치기)/ })).not.toBeInTheDocument();
+  });
+
+  it('화살표로 자손을 숨기고 복원하며 중간 부모의 접힘 상태와 상세 선택을 유지한다', async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockApi();
+    const normal = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/api/items/10/comments')) return Response.json([]);
+      return normal(input, init);
+    });
+    await login(user);
+    await user.click(screen.getByRole('button', { name: '10월 수치 확인', exact: true }));
+    expect(await screen.findByText('확인했습니다')).toBeInTheDocument();
+    fetchMock.mockClear();
+    await user.click(screen.getByRole('button', { name: '매출 자료 하위 항목 접기' }));
+    expect(screen.queryByRole('button', { name: '10월 수치 확인', exact: true })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '매출 자료 하위 항목 펼치기' })).toHaveAttribute('aria-expanded', 'false');
+    await user.click(screen.getByRole('button', { name: '분기 보고서 하위 항목 접기' }));
+    expect(screen.queryByRole('button', { name: '매출 자료', exact: true })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '분기 보고서 하위 항목 펼치기' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('heading', { name: '10월 수치 확인' })).toBeInTheDocument();
+    expect(screen.getByText('확인했습니다')).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: '분기 보고서', exact: true }));
+    expect(screen.getByText('자료를 정리합니다')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '매출 자료', exact: true })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '분기 보고서 하위 항목 펼치기' }));
+    expect(screen.getByRole('button', { name: '매출 자료 하위 항목 펼치기' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: '10월 수치 확인', exact: true })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '매출 자료 하위 항목 펼치기' }));
+    expect(screen.getByRole('button', { name: '10월 수치 확인', exact: true })).toBeInTheDocument();
+    expect(screen.getByText('자료를 정리합니다')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/comments')).map(([input]) => input)).toEqual(['/api/items/10/comments']);
+  });
+
+  it('한 부모를 접어도 다른 부모는 펼친 상태를 유지하고 키보드로 토글할 수 있다', async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockApi();
+    const normal = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/api/items?')) return Response.json([...tree,
+        { ...tree[0], id: 20, rootId: 20, title: '다른 보고서' },
+        { ...tree[1], id: 21, parentId: 20, rootId: 20, title: '다른 자료' },
+      ]);
+      return normal(input, init);
+    });
+    await login(user);
+    const toggle = screen.getByRole('button', { name: '분기 보고서 하위 항목 접기' });
+    toggle.focus();
+    await user.keyboard('{Enter}');
+    expect(toggle).toHaveFocus();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: '매출 자료', exact: true })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '다른 자료', exact: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '다른 보고서 하위 항목 접기' })).toHaveAttribute('aria-expanded', 'true');
+    await user.keyboard(' ');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: '10월 수치 확인', exact: true })).toBeInTheDocument();
+  });
+
   it('가입과 로그인을 제공하고 로그인 후 체크리스트를 연다', async () => {
     const user = userEvent.setup();
     mockApi();
