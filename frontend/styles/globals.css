@@ -6,3 +6,5 @@
 .priority-badge{font-size:10px;white-space:nowrap;padding:3px 6px;border-radius:4px;background:#f0f3f1;color:#607368}.priority-URGENT{background:#fce9e8;color:#a12a22}.priority-HIGH{background:#fff0dc;color:#956216}.priority-CONSIDER{color:#7a837e}.tree-meta{white-space:nowrap}.detail-facts{grid-template-columns:repeat(3,minmax(0,1fr))}
 
 .important-comment{background:#fff9ed;padding-inline:10px;border-left:3px solid #d7a13e;border-radius:5px}.important-tag{display:inline-block;color:#8c6014;margin-right:7px}.comment-tools{display:flex;gap:14px}.comment-important-option{margin-top:9px}
+
+.tree-toggle{flex:0 0 24px;min-width:24px;font-size:16px}.tree-toggle:hover{background:#f1f6f2}.tree-row .tree-row{width:calc(100% - 21px)}.tree-title{min-width:0}.tree-select>.priority-badge,.tree-meta,.add-child{flex-shrink:0}
