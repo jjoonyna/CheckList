@@ -1,0 +1,1 @@
+CREATE TABLE user_item_order (user_id BIGINT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE, item_id BIGINT NOT NULL REFERENCES checklist_item(id) ON DELETE CASCADE, position INTEGER NOT NULL, PRIMARY KEY(user_id,item_id));

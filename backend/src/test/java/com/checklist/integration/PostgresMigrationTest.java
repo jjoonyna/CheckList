@@ -14,7 +14,7 @@ class PostgresMigrationTest {
    var dataSource=postgres.getPostgresDatabase();
    Flyway.configure().dataSource(dataSource).locations("classpath:db/migration").load().migrate();
    JdbcTemplate jdbc=new JdbcTemplate(dataSource);
-   assertEquals(6,jdbc.queryForObject("select count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE'",Integer.class));
+   assertEquals(7,jdbc.queryForObject("select count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE'",Integer.class));
    assertNotNull(jdbc.queryForObject("select data_type from information_schema.columns where table_name='checklist_item' and column_name='version'",String.class));
    assertEquals("uuid",jdbc.queryForObject("select data_type from information_schema.columns where table_name='comment_attachment' and column_name='storage_key'",String.class));
   }

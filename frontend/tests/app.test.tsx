@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../App';
 
@@ -18,14 +18,15 @@ const tree = [
   { id: 12, parentId: 11, rootId: 10, depth: 3, title: '10월 수치 확인', description: '검산', dueDate: null, assigneeId: 1, editorIds: [1], createdBy: 1, status: 'OPEN', version: 0, editable: true, matchesFilter: true, sourceUrl: null },
 ];
 
-function mockApi() {
+function mockApi(rows: unknown[] = tree, orderStatus = 204) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.endsWith('/api/auth/refresh')) return Response.json({ message: '로그인이 필요합니다', code: 'UNAUTHORIZED' }, { status: 401 });
     if (url.endsWith('/api/auth/login') || url.endsWith('/api/auth/register')) return Response.json({ user: currentUser, accessToken: 'access' });
     if (url.endsWith('/api/auth/me')) return Response.json(currentUser);
     if (url.endsWith('/api/users')) return Response.json([currentUser, { id: 2, email: 'yuna@example.com', name: '유나' }]);
-    if (url.includes('/api/items?')) return Response.json(tree);
+    if (url.includes('/api/items?')) return Response.json(rows);
+    if (url.endsWith('/api/items/order')) return orderStatus === 204 ? new Response(null, { status: 204 }) : Response.json({ message: '순서 변경 요청이 올바르지 않습니다.', code: 'INVALID_ORDER' }, { status: 400 });
     if (url.endsWith('/api/items/12/comments')) return Response.json([{ id: 50, itemId: 12, parentId: null, author: currentUser, body: '확인했습니다', createdAt: '2026-10-21T09:00:00Z', attachments: [] }]);
     if (url.endsWith('/api/github/issues')) return Response.json({ issues: [{ number: 7, title: '로그인 화면 개선', body: '접근성 보완', htmlUrl: 'https://github.com/team/app/issues/7', state: 'open' }], hasNext: false, page: 1 });
     if (url.endsWith('/api/items/12/status')) return Response.json({ ...tree[2], status: 'DONE', version: 1 });
@@ -274,4 +275,81 @@ describe('체크리스트 사용자 흐름', () => {
     expect(details).toHaveValue('검산');
     await user.clear(details);await user.type(details,'수정된 세부 내용');
     expect(details).toHaveValue('수정된 세부 내용');
-  });});
+  });  describe('같은 부모 안 순서 변경', () => {
+    const base = tree[0];
+    const rows = [
+      { ...base, id: 20, rootId: 20, title: '가 항목' }, { ...base, id: 21, rootId: 21, title: '나 항목' }, { ...base, id: 22, rootId: 22, title: '다 항목' },
+      { ...base, id: 23, parentId: 21, rootId: 21, depth: 2, title: '나의 자식' },
+    ];
+    const titles = () => screen.getAllByRole('button', { name: / 순서 이동$/ }).map(button => button.getAttribute('aria-label')!.replace(' 순서 이동', ''));
+    const orderCalls = (fetchMock: ReturnType<typeof mockApi>) => fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/api/items/order'));
+    async function open(user: ReturnType<typeof userEvent.setup>, order = 204) {
+      const fetchMock = mockApi(rows, order);
+      render(<App />);
+      await user.type(screen.getByLabelText('이메일'), 'minji@example.com');
+      await user.type(screen.getByLabelText('비밀번호'), 'secure-pass-1');
+      await user.click(screen.getByRole('button', { name: '로그인', exact: true }));
+      await screen.findByRole('button', { name: '가 항목', exact: true });
+      return fetchMock;
+    }
+
+    it('Alt+↓로 한 칸 내려가고 PATCH 본문이 정확하며 포커스가 유지된다', async () => {
+      const user = userEvent.setup();
+      const fetchMock = await open(user);
+      const handle = screen.getByRole('button', { name: '가 항목 순서 이동' });
+      handle.focus();
+      await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
+      await waitFor(() => expect(titles()).toEqual(['나 항목', '나의 자식', '가 항목', '다 항목']));
+      expect(screen.getByRole('button', { name: '가 항목 순서 이동' })).toHaveFocus();
+      const [, init] = orderCalls(fetchMock)[0];
+      expect(init?.method).toBe('PATCH');
+      expect(JSON.parse(String(init?.body))).toEqual({ parentId: null, itemIds: [21, 20, 22] });
+    });
+
+    it('맨 위에서 Alt+↑, 맨 아래에서 Alt+↓는 아무것도 하지 않는다', async () => {
+      const user = userEvent.setup();
+      const fetchMock = await open(user);
+      screen.getByRole('button', { name: '가 항목 순서 이동' }).focus();
+      await user.keyboard('{Alt>}{ArrowUp}{/Alt}');
+      screen.getByRole('button', { name: '다 항목 순서 이동' }).focus();
+      await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
+      expect(titles()).toEqual(['가 항목', '나 항목', '나의 자식', '다 항목']);
+      expect(orderCalls(fetchMock)).toHaveLength(0);
+    });
+
+    it('경계에서 Alt 방향키를 눌러도 이후 목록 갱신 때 포커스를 손잡이로 옮기지 않는다', async () => {
+      const user = userEvent.setup();
+      await open(user);
+      screen.getByRole('button', { name: '가 항목 순서 이동' }).focus();
+      await user.keyboard('{Alt>}{ArrowUp}{/Alt}');
+      await user.click(screen.getByRole('button', { name: '검색', exact: true }));
+      await waitFor(() => expect(screen.getByRole('button', { name: '가 항목 순서 이동' })).not.toHaveFocus());
+      expect(screen.getByRole('button', { name: '다 항목 순서 이동' })).not.toHaveFocus();
+    });
+
+    it('저장에 실패하면 오류를 보이고 서버 순서로 되돌린다', async () => {
+      const user = userEvent.setup();
+      const fetchMock = await open(user, 400);
+      screen.getByRole('button', { name: '가 항목 순서 이동' }).focus();
+      await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
+      expect(await screen.findByText('순서 변경 요청이 올바르지 않습니다.')).toBeInTheDocument();
+      await waitFor(() => expect(titles()).toEqual(['가 항목', '나 항목', '나의 자식', '다 항목']));
+      expect(orderCalls(fetchMock)).toHaveLength(1);
+    });
+
+    it('같은 부모 행으로 드래그하면 순서가 바뀌고 다른 부모 행 위에서는 바뀌지 않는다', async () => {
+      const user = userEvent.setup();
+      const fetchMock = await open(user);
+      const rowOf = (title: string) => screen.getByRole('button', { name: title, exact: true }).closest('.tree-row') as HTMLElement;
+      const data = { setData: vi.fn(), effectAllowed: '' };
+      fireEvent.dragStart(screen.getByRole('button', { name: '다 항목 순서 이동' }), { dataTransfer: data });
+      fireEvent.dragOver(rowOf('나의 자식'), { dataTransfer: data });
+      fireEvent.drop(rowOf('나의 자식'), { dataTransfer: data });
+      expect(orderCalls(fetchMock)).toHaveLength(0);
+      fireEvent.dragOver(rowOf('가 항목'), { dataTransfer: data, clientY: 0 });
+      fireEvent.drop(rowOf('가 항목'), { dataTransfer: data });
+      await waitFor(() => expect(titles()).toEqual(['다 항목', '가 항목', '나 항목', '나의 자식']));
+      expect(JSON.parse(String(orderCalls(fetchMock)[0][1]?.body))).toEqual({ parentId: null, itemIds: [22, 20, 21] });
+    });
+  });
+});
