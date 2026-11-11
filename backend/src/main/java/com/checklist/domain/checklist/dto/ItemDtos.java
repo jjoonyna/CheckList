@@ -11,6 +11,7 @@ public final class ItemDtos {
  public record Input(String title,String description,LocalDate dueDate,Long assigneeId,Long parentId,List<Long> editorIds,Long version,ItemPriority priority){
   public Input(String title,String description,LocalDate dueDate,Long assigneeId,Long parentId,List<Long> editorIds,Long version){this(title,description,dueDate,assigneeId,parentId,editorIds,version,null);}
  }
+ public record OrderInput(Long parentId,List<Long> itemIds){}
  public record StatusInput(ItemStatus status,Long version){}
  public record Item(Long id,Long parentId,Long rootId,int depth,String title,String description,LocalDate dueDate,Long assigneeId,List<Long> editorIds,Long createdBy,ItemStatus status,long version,boolean editable,boolean matchesFilter,String sourceUrl,ItemPriority priority){}
  public static Item from(ItemEntity item,long viewer,boolean match){

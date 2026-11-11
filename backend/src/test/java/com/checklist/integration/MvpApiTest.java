@@ -188,6 +188,21 @@ class MvpApiTest {
         assertEquals(List.of(low.path("id").asLong(),childNormal.path("id").asLong(),leafHigh.path("id").asLong()),java.util.stream.StreamSupport.stream(context.spliterator(),false).map(row->row.path("id").asLong()).toList());
         assertFalse(context.get(0).path("matchesFilter").asBoolean());assertFalse(context.get(1).path("matchesFilter").asBoolean());assertTrue(context.get(2).path("matchesFilter").asBoolean());
     }
+    @Test void itemsWithoutDueDateAreAlwaysShownRegardlessOfPeriod() throws Exception {
+        Session owner=signup("기한미지정자");String prefix="기한 "+UUID.randomUUID()+" ";LocalDate today=LocalDate.now(ZoneId.of("Asia/Seoul"));
+        JsonNode noDue=ranked(owner,null,prefix+"미지정 지난달 생성","NORMAL",null);
+        JsonNode lastMonthDue=ranked(owner,null,prefix+"지난달 마감","NORMAL",today.withDayOfMonth(1).minusDays(1));
+        // 마감일 없는 항목이 지난달에 만들어진 상황을 재현한다.
+        jdbc.update("update checklist_item set created_date=? where id=?",java.sql.Date.valueOf(today.withDayOfMonth(1).minusDays(3)),noDue.path("id").asLong());
+        JsonNode thisMonth=json.readTree(http.perform(get("/api/items").param("q",prefix).header("Authorization","Bearer "+owner.token())).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertEquals(List.of(noDue.path("id").asLong()),java.util.stream.StreamSupport.stream(thisMonth.spliterator(),false).map(row->row.path("id").asLong()).toList());
+        JsonNode past=json.readTree(http.perform(get("/api/items").param("q",prefix).param("period","custom").param("from",today.minusMonths(2).withDayOfMonth(1).toString()).param("to",today.withDayOfMonth(1).minusDays(1).toString()).header("Authorization","Bearer "+owner.token())).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertEquals(java.util.Set.of(noDue.path("id").asLong(),lastMonthDue.path("id").asLong()),java.util.stream.StreamSupport.stream(past.spliterator(),false).map(row->row.path("id").asLong()).collect(java.util.stream.Collectors.toSet()));
+        JsonNode future=json.readTree(http.perform(get("/api/items").param("q",prefix).param("period","custom").param("from",today.plusMonths(2).withDayOfMonth(1).toString()).param("to",today.plusMonths(2).withDayOfMonth(2).toString()).header("Authorization","Bearer "+owner.token())).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertEquals(List.of(noDue.path("id").asLong()),java.util.stream.StreamSupport.stream(future.spliterator(),false).map(row->row.path("id").asLong()).toList());
+        JsonNode done=json.readTree(http.perform(get("/api/items").param("q",prefix).param("status","done").header("Authorization","Bearer "+owner.token())).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertEquals(0,done.size());
+    }
     @Test void importantOriginalCommentsAreFirstAndNewestWithinEachGroup() throws Exception {
         Session owner=signup("중요정렬자");JsonNode root=create(owner,null,null,owner.id(),"중요 댓글 정렬");long id=root.path("id").asLong();
         List<Long> ids=new ArrayList<>();
@@ -269,5 +284,58 @@ class MvpApiTest {
         Cookie fresh=rotated.getResponse().getCookie("checklist_refresh");
         http.perform(post("/api/auth/logout").cookie(fresh).header("X-Requested-With","XMLHttpRequest")).andExpect(status().isNoContent());
         http.perform(get("/api/auth/me").header("Authorization","Bearer "+owner.token())).andExpect(status().isUnauthorized());
+    }
+
+    ResultActions order(Session actor,Long parent,List<Long> ids) throws Exception {
+        Map<String,Object> body=new HashMap<>();body.put("parentId",parent);body.put("itemIds",ids);
+        return http.perform(patch("/api/items/order").header("Authorization","Bearer "+actor.token()).contentType("application/json").content(json.writeValueAsString(body)));
+    }
+    List<Long> listIds(Session actor,String q) throws Exception {
+        LocalDate today=LocalDate.now(ZoneId.of("Asia/Seoul"));
+        JsonNode rows=json.readTree(http.perform(get("/api/items").param("q",q).param("period","custom").param("from",today.minusDays(30).toString()).param("to",today.plusDays(30).toString()).header("Authorization","Bearer "+actor.token())).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        return java.util.stream.StreamSupport.stream(rows.spliterator(),false).map(row->row.path("id").asLong()).toList();
+    }
+    @Test void savedOrderIsPerUserOverridesAutoSortAndKeepsNewItemsLast() throws Exception {
+        Session owner=signup("순서저장자"), other=signup("다른사용자");String prefix="순서 "+UUID.randomUUID()+" ";LocalDate today=LocalDate.now(ZoneId.of("Asia/Seoul"));
+        long a=ranked(owner,null,prefix+"A","NORMAL",today.plusDays(1)).path("id").asLong(),b=ranked(owner,null,prefix+"B","NORMAL",today.plusDays(2)).path("id").asLong(),c=ranked(owner,null,prefix+"C","NORMAL",today.plusDays(3)).path("id").asLong();
+        assertEquals(List.of(a,b,c),listIds(owner,prefix));
+        order(other,null,List.of(b,a)).andExpect(status().isNoContent());
+        order(owner,null,List.of(c,a,b)).andExpect(status().isNoContent());
+        assertEquals(List.of(c,a,b),listIds(owner,prefix));
+        assertEquals(List.of(b,a,c),listIds(other,prefix));
+        long d=ranked(owner,null,prefix+"D","URGENT",today.minusDays(1)).path("id").asLong();
+        assertEquals(List.of(c,a,b,d),listIds(owner,prefix));
+    }
+    @Test void childrenCanBeReorderedAndHiddenSiblingsKeepTheirSlots() throws Exception {
+        Session owner=signup("하위순서자");String prefix="하위 "+UUID.randomUUID()+" ";LocalDate today=LocalDate.now(ZoneId.of("Asia/Seoul"));
+        long root=ranked(owner,null,prefix+"루트","NORMAL",today).path("id").asLong();
+        long a=ranked(owner,root,prefix+"가A","NORMAL",today.plusDays(1)).path("id").asLong(),b=ranked(owner,root,prefix+"나","NORMAL",today.plusDays(2)).path("id").asLong(),c=ranked(owner,root,prefix+"다C","NORMAL",today.plusDays(3)).path("id").asLong();
+        // q로 A·C만 보이는 화면에서 둘을 맞바꾸면 숨겨진 B는 가운데 자리를 지킨다.
+        order(owner,root,List.of(c,a)).andExpect(status().isNoContent());
+        assertEquals(List.of(root,c,b,a),listIds(owner,prefix));
+    }
+    @Test void concurrentOrderSavesBySameUserNeverFail() throws Exception {
+        Session owner=signup("동시순서자");String prefix="동시 "+UUID.randomUUID()+" ";LocalDate today=LocalDate.now(ZoneId.of("Asia/Seoul"));
+        long root=ranked(owner,null,prefix+"루트","NORMAL",today).path("id").asLong();
+        List<Long> ids=new ArrayList<>();for(int i=0;i<4;i++)ids.add(ranked(owner,root,prefix+i,"NORMAL",today.plusDays(i)).path("id").asLong());
+        var pool=java.util.concurrent.Executors.newFixedThreadPool(6);
+        try {
+            List<java.util.concurrent.Future<?>> runs=new ArrayList<>();
+            for(int i=0;i<12;i++){List<Long> shuffled=new ArrayList<>(ids);Collections.shuffle(shuffled);runs.add(pool.submit(()->itemService.reorder(owner.id(),new com.checklist.domain.checklist.dto.ItemDtos.OrderInput(root,shuffled))));}
+            for(var run:runs)run.get();
+        } finally { pool.shutdownNow(); }
+        assertEquals(4,jdbc.queryForObject("select count(*) from user_item_order where user_id=?",Integer.class,owner.id()));
+        assertEquals(4,listIds(owner,prefix).size()-1);
+    }
+    @Test void invalidOrderRequestsAreRejected() throws Exception {
+        Session owner=signup("순서오류자");String prefix="오류 "+UUID.randomUUID()+" ";LocalDate today=LocalDate.now(ZoneId.of("Asia/Seoul"));
+        long root=ranked(owner,null,prefix+"루트","NORMAL",today).path("id").asLong(),other=ranked(owner,null,prefix+"형제","NORMAL",today).path("id").asLong();
+        long child=ranked(owner,root,prefix+"자식","NORMAL",today).path("id").asLong();
+        order(owner,null,List.of()).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_ORDER"));
+        order(owner,null,List.of(root,root)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_ORDER"));
+        order(owner,null,List.of(root,Long.MAX_VALUE)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_ORDER"));
+        order(owner,null,List.of(root,child)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_ORDER"));
+        order(owner,root,List.of(other)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_ORDER"));
+        http.perform(patch("/api/items/order").contentType("application/json").content("{\"parentId\":null,\"itemIds\":["+root+"]}")).andExpect(status().isUnauthorized());
     }
 }
