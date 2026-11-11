@@ -24,9 +24,10 @@ import static com.checklist.domain.checklist.entity.QItemEntity.itemEntity;
  @Transactional(readOnly=true)
  public List<ItemDtos.Item> list(long viewer,String scope,String status,String period,String q,LocalDate from,LocalDate to) {
   if(!Set.of("all","mine").contains(scope)||!Set.of("all","open","done").contains(status))throw ApiException.bad("INVALID_FILTER","필터 값이 올바르지 않습니다.");
-  var range=ItemPeriod.resolve(period,from,to,LocalDate.now(ZoneId.of("Asia/Seoul")));
-  var effectiveDate=itemEntity.dueDate.coalesce(itemEntity.createdDate);
-  var where=effectiveDate.goe(range.start()).and(effectiveDate.lt(range.endExclusive()));
+  LocalDate today=LocalDate.now(ZoneId.of("Asia/Seoul"));
+  var range=ItemPeriod.resolve(period,from,to,today);
+  // 기간은 마감일이 있는 항목만 판정하고, 마감일이 없는 항목은 항상 표시한다.
+  var where=itemEntity.dueDate.isNull().or(itemEntity.dueDate.goe(range.start()).and(itemEntity.dueDate.lt(range.endExclusive())));
   if("mine".equals(scope))where=where.and(itemEntity.assignee.id.eq(viewer));
   if("open".equals(status))where=where.and(itemEntity.status.eq(ItemStatus.OPEN));
   if("done".equals(status))where=where.and(itemEntity.status.eq(ItemStatus.DONE));

@@ -188,6 +188,21 @@ class MvpApiTest {
         assertEquals(List.of(low.path("id").asLong(),childNormal.path("id").asLong(),leafHigh.path("id").asLong()),java.util.stream.StreamSupport.stream(context.spliterator(),false).map(row->row.path("id").asLong()).toList());
         assertFalse(context.get(0).path("matchesFilter").asBoolean());assertFalse(context.get(1).path("matchesFilter").asBoolean());assertTrue(context.get(2).path("matchesFilter").asBoolean());
     }
+    @Test void itemsWithoutDueDateAreAlwaysShownRegardlessOfPeriod() throws Exception {
+        Session owner=signup("기한미지정자");String prefix="기한 "+UUID.randomUUID()+" ";LocalDate today=LocalDate.now(ZoneId.of("Asia/Seoul"));
+        JsonNode noDue=ranked(owner,null,prefix+"미지정 지난달 생성","NORMAL",null);
+        JsonNode lastMonthDue=ranked(owner,null,prefix+"지난달 마감","NORMAL",today.withDayOfMonth(1).minusDays(1));
+        // 마감일 없는 항목이 지난달에 만들어진 상황을 재현한다.
+        jdbc.update("update checklist_item set created_date=? where id=?",java.sql.Date.valueOf(today.withDayOfMonth(1).minusDays(3)),noDue.path("id").asLong());
+        JsonNode thisMonth=json.readTree(http.perform(get("/api/items").param("q",prefix).header("Authorization","Bearer "+owner.token())).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertEquals(List.of(noDue.path("id").asLong()),java.util.stream.StreamSupport.stream(thisMonth.spliterator(),false).map(row->row.path("id").asLong()).toList());
+        JsonNode past=json.readTree(http.perform(get("/api/items").param("q",prefix).param("period","custom").param("from",today.minusMonths(2).withDayOfMonth(1).toString()).param("to",today.withDayOfMonth(1).minusDays(1).toString()).header("Authorization","Bearer "+owner.token())).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertEquals(java.util.Set.of(noDue.path("id").asLong(),lastMonthDue.path("id").asLong()),java.util.stream.StreamSupport.stream(past.spliterator(),false).map(row->row.path("id").asLong()).collect(java.util.stream.Collectors.toSet()));
+        JsonNode future=json.readTree(http.perform(get("/api/items").param("q",prefix).param("period","custom").param("from",today.plusMonths(2).withDayOfMonth(1).toString()).param("to",today.plusMonths(2).withDayOfMonth(2).toString()).header("Authorization","Bearer "+owner.token())).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertEquals(List.of(noDue.path("id").asLong()),java.util.stream.StreamSupport.stream(future.spliterator(),false).map(row->row.path("id").asLong()).toList());
+        JsonNode done=json.readTree(http.perform(get("/api/items").param("q",prefix).param("status","done").header("Authorization","Bearer "+owner.token())).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertEquals(0,done.size());
+    }
     @Test void importantOriginalCommentsAreFirstAndNewestWithinEachGroup() throws Exception {
         Session owner=signup("중요정렬자");JsonNode root=create(owner,null,null,owner.id(),"중요 댓글 정렬");long id=root.path("id").asLong();
         List<Long> ids=new ArrayList<>();

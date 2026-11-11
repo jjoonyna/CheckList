@@ -55,6 +55,24 @@ describe('체크리스트 사용자 흐름', () => {
     expect(screen.queryByRole('button', { name: /10월 수치 확인 하위 항목 (접기|펼치기)/ })).not.toBeInTheDocument();
   });
 
+  it('트리 행에는 하위 항목 추가 버튼이 없고 토글이 제목 뒤에 오며 상세의 추가 버튼은 동작한다', async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockApi();
+    const normal = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/api/items/10/comments')) return Response.json([]);
+      return normal(input, init);
+    });
+    await login(user);
+    expect(screen.queryByRole('button', { name: /하위 항목 추가/ })).not.toBeInTheDocument();
+    const toggle = screen.getByRole('button', { name: '분기 보고서 하위 항목 접기' });
+    const select = screen.getByRole('button', { name: '분기 보고서', exact: true });
+    expect(select.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await user.click(select);
+    await user.click(await screen.findByRole('button', { name: /하위 항목 추가/ }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  });
+
   it('화살표로 자손을 숨기고 복원하며 중간 부모의 접힘 상태와 상세 선택을 유지한다', async () => {
     const user = userEvent.setup();
     const fetchMock = mockApi();

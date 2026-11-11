@@ -7,4 +7,4 @@
 
 .important-comment{background:#fff9ed;padding-inline:10px;border-left:3px solid #d7a13e;border-radius:5px}.important-tag{display:inline-block;color:#8c6014;margin-right:7px}.comment-tools{display:flex;gap:14px}.comment-important-option{margin-top:9px}
 
-.tree-toggle{flex:0 0 24px;min-width:24px;font-size:16px}.tree-toggle:hover{background:#f1f6f2}.tree-row .tree-row{width:calc(100% - 21px)}.tree-title{min-width:0}.tree-select>.priority-badge,.tree-meta,.add-child{flex-shrink:0}
+.tree-toggle{flex:0 0 24px;min-width:24px;font-size:16px}.tree-toggle:hover{background:#f1f6f2}.tree-row .tree-row{width:calc(100% - 21px)}.tree-title{min-width:0}.tree-select>.priority-badge,.tree-meta{flex-shrink:0}
